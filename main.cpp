@@ -5,7 +5,6 @@
 //  Created by synycboom on 9/11/2558 BE.
 //  Copyright © 2558 HOME. All rights reserved.
 //
-
 #include <iostream>
 #include <fstream>
 #include <array>
@@ -20,6 +19,9 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "SVMTest.cpp"
 #include "HistogramTool.cpp"
+
+#define DICTIONARY_BUILD 1
+
 using namespace cv;
 using namespace std;
 using namespace ml;
@@ -600,17 +602,13 @@ void testBOW(){
     //Set the dictionary with the vocabulary we created in the first step
     bowDE.setVocabulary(dictionary);
     
-    
-    //To store the image tag name - only for save the descriptor in a file
-    char * imageTag = new char[10];
-    
     //open the file to write the resultant descriptor
     FileStorage positiveDes("pos-descriptor.yml", FileStorage::WRITE);
     FileStorage negativeDes("neg-descriptor.yml", FileStorage::WRITE);
     FileStorage allDes("all-descriptor.yml", FileStorage::WRITE);
     
-    string targetPhoto = DataManager::getInstance().FULL_PATH_PHOTO + "floor1.jpg";
-    Mat img=imread(targetPhoto,CV_LOAD_IMAGE_GRAYSCALE);
+    string targetPhoto = DataManager::getInstance().FULL_PATH_PHOTO + "c12.jpg";
+    Mat img=imread(targetPhoto, CV_LOAD_IMAGE_GRAYSCALE);
     vector<KeyPoint> targetKeypoints;
     detector->detect(img,targetKeypoints);
     Mat targetBowDescriptor;
@@ -620,11 +618,13 @@ void testBOW(){
     Mat allTraining;
     Mat labelsMat;
     
+    //positive training set
+    
     string carName = DataManager::getInstance().FULL_PATH_PHOTO + "car";
     Mat tranningPositive;
-    for (int index = 1; index <= 46; index++) {
+    for (int index = 1; index <= 6; index++) {
         string picName = carName + to_string(index) + surname;
-        Mat input = imread(picName);
+        Mat input = imread(picName, CV_LOAD_IMAGE_GRAYSCALE);
         
         //To store the keypoints that will be extracted by SIFT
         vector<KeyPoint> keypoints;
@@ -640,11 +640,13 @@ void testBOW(){
         labelsMat.push_back(1);
     }
     
+    //negative training set
+    
     string floorName = DataManager::getInstance().FULL_PATH_PHOTO + "floor";
     Mat tranningNegative;
     for (int index = 1; index <= 6; index++) {
         string picName = floorName + to_string(index) + surname;
-        Mat input = imread(picName);
+        Mat input = imread(picName, CV_LOAD_IMAGE_GRAYSCALE);
         
         //To store the keypoints that will be extracted by SIFT
         vector<KeyPoint> keypoints;
@@ -661,18 +663,21 @@ void testBOW(){
     }
     
 
-//    //prepare the yml (some what similar to xml) file
-//    sprintf(imageTag,"positive-descriptor");
-//    sprintf(imageTag,"negative-descriptor");
-//    sprintf(imageTag,"all-descriptor");
-//    //write the new BoF descriptor to the file
-//    positiveDes << imageTag << tranningPositive;
-//    negativeDes << imageTag << tranningNegative;
-//    allDes << imageTag << allTraining;
-//    //release the file storage
-//    positiveDes.release();
-//    negativeDes.release();
-//    allDes.release();
+    //To store the image tag name - only for save the descriptor in a file
+    char * imageTag = new char[10];
+    
+    //prepare the yml (some what similar to xml) file
+    sprintf(imageTag,"positive-descriptor");
+    sprintf(imageTag,"negative-descriptor");
+    sprintf(imageTag,"all-descriptor");
+    //write the new BoF descriptor to the file
+    positiveDes << imageTag << tranningPositive;
+    negativeDes << imageTag << tranningNegative;
+    allDes << imageTag << allTraining;
+    //release the file storage
+    positiveDes.release();
+    negativeDes.release();
+    allDes.release();
     
     ///////// train SVM ////////
     
@@ -680,13 +685,14 @@ void testBOW(){
     // Set up SVM's parameters
     Ptr<SVM> svm = ml::SVM::create();
     svm->setType(ml::SVM::C_SVC);
-    svm->setKernel(ml::SVM::RBF);
+//    svm->setKernel(ml::SVM::RBF);
+    //TermCriteria( max type, max count, min accuracy)
+//    svm->setTermCriteria(TermCriteria(TermCriteria::MAX_ITER, 1000000, 1e-10));
+    svm->setKernel(ml::SVM::CHI2);
     svm->setTermCriteria(cv::TermCriteria(TermCriteria::MAX_ITER, 100, 1e-6));
-    
     // Train the SVM
     svm->train(allTraining, ml::ROW_SAMPLE, labelsMat);
     
-    cout << labelsMat << endl << endl;
     
     ///////// prediction /////////
     
@@ -699,63 +705,28 @@ void testBOW(){
 
 int main(int argc, const char * argv[]) {
     
-    //    showSurfFeature("bird3.jpg");
-//        showSiftFeature("car40.jpg");
-    //    showORBFeature("bird7.jpg");
-    //    showFastCorner("bird3.jpg");
-    //    dftTransform();
-    //    testFeature();
+#if DICTIONARY_BUILD == 1
     
-//    imageRegistrator();
-    
-    string pname = "car40.jpg";
-    string parking = "car41.jpg";
     vector<KeyPoint> siftKeypoints, surfKeypoints, orbKeypoints, fastKeypoints, parkingKeyPoints;
-    namedWindow("origin");
-    namedWindow("BFS");
-    namedWindow("FLANN");
-    Mat origin;
-    Mat BFSOutput,FLANNOutput;
-    Mat img = imread(DataManager::getInstance().FULL_PATH_PHOTO + pname);
-    Mat parkingImg = imread(DataManager::getInstance().FULL_PATH_PHOTO + parking);
-    img.copyTo(origin);
-    Mat emptyImg(img.rows,img.cols, CV_8SC3, Scalar(255,255,255));
     
     Ptr<Feature2D> sift = xfeatures2d::SIFT::create();
-    
-    siftKeypoints = getSiftKeyPoint(pname);
-    parkingKeyPoints = getSiftKeyPoint(parking);
-    surfKeypoints = getSurfKeyPoint(pname);
-    orbKeypoints = getOrbKeyPoint(pname);
-    fastKeypoints = getFastKeyPoint(pname);
     
     string tmpName = DataManager::getInstance().FULL_PATH_PHOTO + "car";
     string surname = ".jpg";
     Mat unclusteredDescriptors;
     for (int index = 1; index <= 46; index++) {
         Mat descriptor;
+        vector<KeyPoint> keypoints;
         string picName = tmpName + to_string(index) + surname;
-        Mat input = imread(picName);
-        siftKeypoints = getSiftKeyPoint_tmp(input);
-        sift->compute(img, siftKeypoints, descriptor);
+        Mat input = imread(picName, CV_LOAD_IMAGE_GRAYSCALE);
+        keypoints = getSiftKeyPoint_tmp(input);
+        sift->compute(input, keypoints, descriptor);
         unclusteredDescriptors.push_back(descriptor);
     }
     
-//    int MAX_ITER = 100;
-//    int EPS = 2;
-//    
-//    TermCriteria tc(MAX_ITER + EPS,1,0.001);
-//    
-//    int dictSize = 1000;
-//    int retries = 1;
-//    int flags = KMEANS_PP_CENTERS;
-//    BOWKMeansTrainer bowTrainer(dictSize,tc,retries,flags);
-//    
-//    BOWImgDescriptorExtractor bowDE(descriptors,matcher);
-    
     //Construct BOWKMeansTrainer
     //the number of bags
-    int dictionarySize=46;
+    int dictionarySize= 1000;
     //define Term Criteria
     TermCriteria tc(CV_TERMCRIT_ITER,100,0.001);
     //retries number
@@ -765,56 +736,20 @@ int main(int argc, const char * argv[]) {
     //Create the BoW (or BoF) trainer
     BOWKMeansTrainer bowTrainer(dictionarySize,tc,retries,flags);
     //cluster the feature vectors
-    Mat dictionary=bowTrainer.cluster(unclusteredDescriptors);
+    Mat dictionary = bowTrainer.cluster(unclusteredDescriptors);
     
     //store the vocabulary
     FileStorage fs("dictionary.yml", FileStorage::WRITE);
     fs << "vocabulary" << dictionary;
     fs.release();
+
     
-    
-    ////////////////////
-//    Mat descriptors_1, descriptors_2;
-//    std::vector< DMatch > BFSMatches, FLANNMatches;
-//    
-//    Ptr<Feature2D> sift = xfeatures2d::SIFT::create();
-//    sift->compute(img, siftKeypoints, descriptors_1);
-//    sift->compute(parkingImg, parkingKeyPoints, descriptors_2);
-//    
-//    BFMatcher matcher;
-//    matcher.match( descriptors_1, descriptors_2, BFSMatches );
-//    nth_element(BFSMatches.begin(), BFSMatches.begin()+12, BFSMatches.end());
-//    BFSMatches.erase(BFSMatches.begin() + 13, BFSMatches.end());
-//    drawMatches(img, siftKeypoints, parkingImg, parkingKeyPoints, BFSMatches, BFSOutput);
-//    
-//    FlannBasedMatcher flannMatcher;
-//    flannMatcher.match(descriptors_1, descriptors_2, FLANNMatches);
-//    
-//    double max_dist = 0; double min_dist = 100;
-//    
-//    //-- Quick calculation of max and min distances between keypoints
-//    for( int i = 0; i < descriptors_1.rows; i++ )
-//    { double dist = FLANNMatches[i].distance;
-//        if( dist < min_dist ) min_dist = dist;
-//        if( dist > max_dist ) max_dist = dist;
-//    }
-//    
-//    vector< DMatch > good_matches;
-//    for( int i = 0; i < descriptors_1.rows; i++ ){
-//        if( FLANNMatches[i].distance <= max(2*min_dist, 0.02) ){
-//            good_matches.push_back( FLANNMatches[i]);
-//        }
-//    }
-//    drawMatches(img, siftKeypoints, parkingImg, parkingKeyPoints, good_matches, FLANNOutput);
-    
-    
+#else
     
     testBOW();
     
-    
-//    imshow("BFS", BFSOutput);
-//    imshow("FLANN", FLANNOutput);
-//    imshow("origin", unclusteredDescriptors);
+#endif
+
     waitKey(0);
     
     
