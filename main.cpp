@@ -20,8 +20,10 @@
 #include "SVMTest.cpp"
 #include "HistogramTool.cpp"
 
-#define DICTIONARY_BUILD 1
-
+#define DICTIONARY_BUILD 0
+#define MODE 2
+#define MAX_CAR 114
+#define MAX_NOT_CAR 107
 using namespace cv;
 using namespace std;
 using namespace ml;
@@ -417,7 +419,7 @@ void showSiftFeature(string pname){
     Mat img;
     Mat distance;
     namedWindow("SIFT");
-    string imgPath1 = DataManager::getInstance().FULL_PATH_PHOTO + pname;
+    string imgPath1 = DataManager::getInstance().FULL_PATH_PHOTO +pname;
     img = imread(imgPath1);
     
 //    cvtColor(img, img, CV_BGR2GRAY);
@@ -465,71 +467,6 @@ void showORBFeature(string pname){
     waitKey(0);
 }
 
-void dftTransform(){
-    string imgPath1 = DataManager::getInstance().FULL_PATH_PHOTO + "transform1.jpg";
-    
-    VideoCapture cap(0);
-    cap.set(CV_CAP_PROP_FRAME_WIDTH,640);
-    cap.set(CV_CAP_PROP_FRAME_HEIGHT,480);
-    
-    while(1){
-        
-    
-//    Mat I = imread(imgPath1, CV_LOAD_IMAGE_GRAYSCALE);
-        Mat I;
-        cap.read(I);
-        cvtColor(I, I, COLOR_BGR2GRAY);
-    
-    Mat padded;                            //expand input image to optimal size
-    int m = getOptimalDFTSize( I.rows );
-    int n = getOptimalDFTSize( I.cols ); // on the border add zero values
-    copyMakeBorder(I, padded, 0, m - I.rows, 0, n - I.cols, BORDER_CONSTANT, Scalar::all(0));
-    
-    Mat planes[] = {Mat_<float>(padded), Mat::zeros(padded.size(), CV_32F)};
-    Mat complexI;
-    merge(planes, 2, complexI);         // Add to the expanded another plane with zeros
-    
-    dft(complexI, complexI);            // this way the result may fit in the source matrix
-    
-    // compute the magnitude and switch to logarithmic scale
-    // => log(1 + sqrt(Re(DFT(I))^2 + Im(DFT(I))^2))
-    split(complexI, planes);                   // planes[0] = Re(DFT(I), planes[1] = Im(DFT(I))
-    magnitude(planes[0], planes[1], planes[0]);// planes[0] = magnitude
-    Mat magI = planes[0];
-    
-    magI += Scalar::all(1);                    // switch to logarithmic scale
-    log(magI, magI);
-    
-    // crop the spectrum, if it has an odd number of rows or columns
-    magI = magI(Rect(0, 0, magI.cols & -2, magI.rows & -2));
-    
-    // rearrange the quadrants of Fourier image  so that the origin is at the image center
-    int cx = magI.cols/2;
-    int cy = magI.rows/2;
-    
-    Mat q0(magI, Rect(0, 0, cx, cy));   // Top-Left - Create a ROI per quadrant
-    Mat q1(magI, Rect(cx, 0, cx, cy));  // Top-Right
-    Mat q2(magI, Rect(0, cy, cx, cy));  // Bottom-Left
-    Mat q3(magI, Rect(cx, cy, cx, cy)); // Bottom-Right
-    
-    Mat tmp;                           // swap quadrants (Top-Left with Bottom-Right)
-    q0.copyTo(tmp);
-    q3.copyTo(q0);
-    tmp.copyTo(q3);
-    
-    q1.copyTo(tmp);                    // swap quadrant (Top-Right with Bottom-Left)
-    q2.copyTo(q1);
-    tmp.copyTo(q2);
-    
-    normalize(magI, magI, 0, 1, CV_MINMAX); // Transform the matrix with float values into a
-    // viewable image form (float between values 0 and 1).
-    
-    imshow("Input Image"       , I   );    // Show the result
-    imshow("spectrum magnitude", magI);
-    waitKey(30);
-        
-    }
-}
 
 vector<KeyPoint> getFastKeyPoint(string pname){
     Mat img;
@@ -587,7 +524,7 @@ vector<KeyPoint> getOrbKeyPoint(string pname){
     return keypoints;
 }
 
-void testBOW(){
+void predictionStep(){
     //prepare BOW descriptor extractor from the dictionary
     Mat dictionary;
     FileStorage fs("dictionary.yml", FileStorage::READ);
@@ -603,27 +540,17 @@ void testBOW(){
     bowDE.setVocabulary(dictionary);
     
     //open the file to write the resultant descriptor
-    FileStorage positiveDes("pos-descriptor.yml", FileStorage::WRITE);
-    FileStorage negativeDes("neg-descriptor.yml", FileStorage::WRITE);
     FileStorage allDes("all-descriptor.yml", FileStorage::WRITE);
     
-    string targetPhoto = DataManager::getInstance().FULL_PATH_PHOTO + "c12.jpg";
-    Mat img=imread(targetPhoto, CV_LOAD_IMAGE_GRAYSCALE);
-    vector<KeyPoint> targetKeypoints;
-    detector->detect(img,targetKeypoints);
-    Mat targetBowDescriptor;
-    bowDE.compute2(img,targetKeypoints,targetBowDescriptor);
-    
-    string surname = ".jpg";
-    Mat allTraining;
+    string extension = ".jpg";
+    Mat trainingSet;
     Mat labelsMat;
     
     //positive training set
     
-    string carName = DataManager::getInstance().FULL_PATH_PHOTO + "car";
-    Mat tranningPositive;
-    for (int index = 1; index <= 6; index++) {
-        string picName = carName + to_string(index) + surname;
+    string carName = DataManager::getInstance().FULL_PATH_PHOTO + "/car_set/car";
+    for (int index = 1; index <= MAX_CAR - 40; index++) {
+        string picName = carName + to_string(index) + extension;
         Mat input = imread(picName, CV_LOAD_IMAGE_GRAYSCALE);
         
         //To store the keypoints that will be extracted by SIFT
@@ -634,18 +561,16 @@ void testBOW(){
         Mat bowDescriptor;
         //extract BoW (or BoF) descriptor from given image
         bowDE.compute2(input,keypoints,bowDescriptor);
-        tranningPositive.push_back(bowDescriptor);
-        //////////
-        allTraining.push_back(bowDescriptor);
+        trainingSet.push_back(bowDescriptor);
         labelsMat.push_back(1);
     }
     
     //negative training set
     
-    string floorName = DataManager::getInstance().FULL_PATH_PHOTO + "floor";
+    string floorName = DataManager::getInstance().FULL_PATH_PHOTO + "/not_car_set/notcar";
     Mat tranningNegative;
-    for (int index = 1; index <= 6; index++) {
-        string picName = floorName + to_string(index) + surname;
+    for (int index = 1; index <= MAX_NOT_CAR; index++) {
+        string picName = floorName + to_string(index) + extension;
         Mat input = imread(picName, CV_LOAD_IMAGE_GRAYSCALE);
         
         //To store the keypoints that will be extracted by SIFT
@@ -656,9 +581,7 @@ void testBOW(){
         Mat bowDescriptor;
         //extract BoW (or BoF) descriptor from given image
         bowDE.compute2(input,keypoints,bowDescriptor);
-        tranningNegative.push_back(bowDescriptor);
-        /////////
-        allTraining.push_back(bowDescriptor);
+        trainingSet.push_back(bowDescriptor);
         labelsMat.push_back(-1);
     }
     
@@ -667,39 +590,65 @@ void testBOW(){
     char * imageTag = new char[10];
     
     //prepare the yml (some what similar to xml) file
-    sprintf(imageTag,"positive-descriptor");
-    sprintf(imageTag,"negative-descriptor");
     sprintf(imageTag,"all-descriptor");
-    //write the new BoF descriptor to the file
-    positiveDes << imageTag << tranningPositive;
-    negativeDes << imageTag << tranningNegative;
-    allDes << imageTag << allTraining;
+    allDes << imageTag << trainingSet;
     //release the file storage
-    positiveDes.release();
-    negativeDes.release();
     allDes.release();
     
     ///////// train SVM ////////
-    
-
-    // Set up SVM's parameters
     Ptr<SVM> svm = ml::SVM::create();
     svm->setType(ml::SVM::C_SVC);
-//    svm->setKernel(ml::SVM::RBF);
-    //TermCriteria( max type, max count, min accuracy)
-//    svm->setTermCriteria(TermCriteria(TermCriteria::MAX_ITER, 1000000, 1e-10));
-    svm->setKernel(ml::SVM::CHI2);
-    svm->setTermCriteria(cv::TermCriteria(TermCriteria::MAX_ITER, 100, 1e-6));
-    // Train the SVM
-    svm->train(allTraining, ml::ROW_SAMPLE, labelsMat);
-    
+    svm->setGamma(30);
+    svm->setKernel(ml::SVM::RBF);
+    svm->setTermCriteria(cv::TermCriteria(TermCriteria::MAX_ITER, 1000, 1e-6));
+    svm->train(trainingSet, ml::ROW_SAMPLE, labelsMat);
     
     ///////// prediction /////////
+//    ofstream myfile;
+//    myfile.open ("RBF.txt");
+//    
+//    int falseNegative = 0, falsePositive = 0;
+//    for (int index = 1; index <= MAX_CAR; index++) {
+//        string targetPhoto = DataManager::getInstance().FULL_PATH_PHOTO + "/car_set/car"
+//                            + to_string(index)+ extension;
+//        Mat img=imread(targetPhoto, CV_LOAD_IMAGE_GRAYSCALE);
+//        vector<KeyPoint> targetKeypoints;
+//        detector->detect(img,targetKeypoints);
+//        Mat targetBowDescriptor;
+//        bowDE.compute2(img,targetKeypoints,targetBowDescriptor);
+//        float response = svm->predict(targetBowDescriptor);
+//        if(response == -1) falseNegative++;
+//        myfile << "car" << to_string(index) << " = " << to_string(response) << endl;
+//    }
+//    for (int index = 1; index <= MAX_NOT_CAR; index++) {
+//        string targetPhoto = DataManager::getInstance().FULL_PATH_PHOTO + "/not_car_set/notcar"
+//                            + to_string(index) + extension;
+//        Mat img=imread(targetPhoto, CV_LOAD_IMAGE_GRAYSCALE);
+//        vector<KeyPoint> targetKeypoints;
+//        detector->detect(img,targetKeypoints);
+//        Mat targetBowDescriptor;
+//        bowDE.compute2(img,targetKeypoints,targetBowDescriptor);
+//        float response = svm->predict(targetBowDescriptor);
+//        if(response == 1) falsePositive++;
+//        myfile << "notcar" << to_string(index) << " = " << to_string(response) << endl;
+//    }
+//    myfile << endl << endl;
+//    myfile << "false positive = " << to_string(falsePositive) << endl;
+//    myfile << "false negative = " << to_string(falseNegative) << endl;
+//    myfile.close();
     
+    
+    string named = "Predict Car";
+    string targetPhoto = DataManager::getInstance().FULL_PATH_PHOTO + "/car_set/car4.jpg";
+    Mat img=imread(targetPhoto, CV_LOAD_IMAGE_GRAYSCALE);
+    vector<KeyPoint> targetKeypoints;
+    detector->detect(img,targetKeypoints);
+    Mat targetBowDescriptor;
+    bowDE.compute2(img,targetKeypoints,targetBowDescriptor);
     float response = svm->predict(targetBowDescriptor);
-    
-    cout << response << endl;
-
+    cout << "Predict: " << response << endl;
+    imshow(named, img);
+    waitKey(0);
     
 }
 
@@ -711,10 +660,10 @@ int main(int argc, const char * argv[]) {
     
     Ptr<Feature2D> sift = xfeatures2d::SIFT::create();
     
-    string tmpName = DataManager::getInstance().FULL_PATH_PHOTO + "car";
+    string tmpName = DataManager::getInstance().FULL_PATH_PHOTO + "/car_set/car";
     string surname = ".jpg";
     Mat unclusteredDescriptors;
-    for (int index = 1; index <= 46; index++) {
+    for (int index = 1; index <= 114; index++) {
         Mat descriptor;
         vector<KeyPoint> keypoints;
         string picName = tmpName + to_string(index) + surname;
@@ -728,7 +677,7 @@ int main(int argc, const char * argv[]) {
     //the number of bags
     int dictionarySize= 1000;
     //define Term Criteria
-    TermCriteria tc(CV_TERMCRIT_ITER,100,0.001);
+    TermCriteria tc(CV_TERMCRIT_ITER,100, 1e-6);
     //retries number
     int retries=1;
     //necessary flags
@@ -742,16 +691,37 @@ int main(int argc, const char * argv[]) {
     FileStorage fs("dictionary.yml", FileStorage::WRITE);
     fs << "vocabulary" << dictionary;
     fs.release();
-
+    cout << "Dictionary created";
     
 #else
+    predictionStep();
     
-    testBOW();
-    
-#endif
+//#if MODE == 1 //Run Thresholding
+//    string window1 = "thresholding";
+//    string window2 = "original";
+//    Mat originCar = imread(DataManager::getInstance().FULL_PATH_PHOTO + "sc3.jpg",0);
+//    namedWindow(window1);
+//    imshow(window1,originCar);
+//    threshold( originCar, originCar, 75, 255,1 );
+//    imshow(window2, originCar);
+//    waitKey(0);
+//#else
+//    imageRegistrator();
+//     string window1 = "thresholding";
+//    Ptr<Feature2D> sift = xfeatures2d::SIFT::create();
+//    string tmp = "car_set/car40.jpg";
+//    Mat descriptor;
+//    Mat img = imread(DataManager::getInstance().FULL_PATH_PHOTO + tmp);
+//    vector<KeyPoint> keypoints;
+//    keypoints = getSiftKeyPoint_tmp(img);
+//    sift->compute(img, keypoints, descriptor);
+//    cout << descriptor << endl;
+//    FileStorage fs("des.yml", FileStorage::WRITE);
+//    fs << "descriptor" << descriptor;
+//    fs.release();
 
-    waitKey(0);
-    
-    
-    
+//    showSiftFeature(tmp);
+//#endif
+
+#endif
 }
