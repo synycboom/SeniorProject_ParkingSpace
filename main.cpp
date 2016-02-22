@@ -17,411 +17,162 @@
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/calib3d/calib3d.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
-#include "SVMTest.cpp"
-#include "HistogramTool.cpp"
 
-#define DICTIONARY_BUILD 0
+#include<sys/types.h>
+#include<dirent.h>
+
+#include "ColorDetection.cpp"
+#include "DataManager.cpp"
+
+#include <cstring>      // Needed for memset
+#include <sys/socket.h> // Needed for the socket functions
+#include <netdb.h>      // Needed for the socket functions
+
+#define CODE_SEGMENT 1
 #define MODE 2
-#define MAX_CAR 114
-#define MAX_NOT_CAR 107
+//#define MAX_CAR 114
+#define MAX_CAR 100
+//#define MAX_NOT_CAR 107
+#define MAX_NOT_CAR 100
+
+
+#define TRAIN_MIN 1
+#define TRAIN_MAX 100
+
+#define TEST_MIN 91
+#define TEST_MAX 100
+
+#define RESULT "save-test-2.txt"
 using namespace cv;
 using namespace std;
 using namespace ml;
 
-const float WIDTH = 380;
-const float HEIGHT = 204;
+const string PHOTO_PATH(DataManager::FULL_PATH_PHOTO);
 
+void ls(string path, vector<string>* fileList){
+    DIR *dp;
+    dirent *d;
+    
+    const char* _path = path.c_str();
+    if((dp = opendir(_path)) != NULL)
+        perror("opendir");
+    
+    while((d = readdir(dp)) != NULL)
+    {
+        if(!strcmp(d->d_name,".") || !strcmp(d->d_name,".."))
+            continue;
+        fileList->push_back(d->d_name);
+    }
+}
 
-////////////////////////////////////// Image Registration //////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////
-void imageRegistrator(){
-    VideoCapture cap(DataManager::getInstance().FULL_PATH_VIDEO + "point.mp4");
-    Mat img;
+void cropImage(){
+
+    Mat img = imread(PHOTO_PATH + "Marking_day3/1.JPG");
     Mat origin;
     Mat output;
-    namedWindow("input");
-    namedWindow("output");
-    while(1){
-        cap.read(img);
-        img.copyTo(origin);
-        cvtColor(img, img, CV_BGR2HSV);
-        Mat yellowMat, greenMat, redMat, blueMat;
-        
-        //yellow
-        inRange(img, Scalar(22,100,100), Scalar(38,255,255), yellowMat);
-        //blue have 2 point problem
-        inRange(img, Scalar(100,25,25), Scalar(130,255,255), blueMat);
-        //red
-        inRange(img, Scalar(0,50,50), Scalar(10,255,255), redMat);
-        //green
-        inRange(img, Scalar(38,50,50), Scalar(75,255,255), greenMat);
-        
-        medianBlur(yellowMat, yellowMat, 11);
-        medianBlur(blueMat, blueMat, 11);
-        medianBlur(redMat, redMat, 11);
-        medianBlur(greenMat, greenMat, 11);
-        
-        Mat canny_yellow,canny_red,canny_green,canny_blue;
-        vector<vector<Point> > contour_yellow,contour_red,contour_green,contour_blue;
-        vector<Vec4i> hierarchy;
-        
-        /// Detect edges using canny
-        Canny( yellowMat, canny_yellow, 100, 200, 3 );
-        Canny( blueMat, canny_red, 100, 200, 3 );
-        Canny( redMat, canny_green, 100, 200, 3 );
-        Canny( greenMat, canny_blue, 100, 200, 3 );
-        /// Find contours
-        findContours( canny_yellow, contour_yellow, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
-        findContours( canny_red, contour_red, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
-        findContours( canny_green, contour_green, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
-        findContours( canny_blue, contour_blue, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
-        
-        cv::Point centoid_yellow,centoid_red,centoid_green,centoid_blue;
-        
-        cv::Moments momYellow= cv::moments(cv::Mat(contour_yellow[0]));
-        cv::Moments momRed= cv::moments(cv::Mat(contour_red[0]));
-        cv::Moments momGreen= cv::moments(cv::Mat(contour_green[0]));
-        cv::Moments momBlue= cv::moments(cv::Mat(contour_blue[0]));
-        
-        //        cv::circle(origin,
-        //                   Point(momYellow.m10/momYellow.m00,momYellow.m01/momYellow.m00),
-        //                   2,cv::Scalar(255),2);
-        centoid_yellow =  Point(momYellow.m10/momYellow.m00,momYellow.m01/momYellow.m00);
-        centoid_red = Point(momRed.m10/momRed.m00,momRed.m01/momRed.m00);
-        centoid_green = Point(momGreen.m10/momGreen.m00,momGreen.m01/momGreen.m00);
-        centoid_blue = Point(momBlue.m10/momBlue.m00,momBlue.m01/momBlue.m00);
-        
-        // compute the width of the new image, which will be the
-        // maximum distance between bottom-right and bottom-left
-        // x-coordiates or the top-right and top-left x-coordinates
-        double widthA = sqrt(
-                             pow(centoid_red.x - centoid_yellow.x, 2) +
-                             pow(centoid_red.y - centoid_yellow.y, 2)
-                             );
-        double widthB = sqrt(
-                             pow(centoid_green.x - centoid_blue.x, 2) +
-                             pow(centoid_green.y - centoid_blue.y, 2)
-                             );
-        double maxWidth = max(int(widthA), int(widthB));
-        
-        // compute the height of the new image, which will be the
-        // maximum distance between the top-right and bottom-right
-        // y-coordinates or the top-left and bottom-left y-coordinates
-        double heightA = sqrt(
-                              pow((centoid_green.x - centoid_red.x),2) +
-                              pow((centoid_green.y - centoid_red.y),2)
-                              );
-        double heightB = sqrt(
-                              pow((centoid_blue.x - centoid_yellow.x),2) +
-                              pow((centoid_blue.y - centoid_yellow.y),2)
-                              );
-        double maxHeight = max(int(heightA), int(heightB));
-        
-        cv::Point2f source_points[4];
-        cv::Point2f dest_points[4];
-        
-        source_points[0] = centoid_red; // bottom-left
-        source_points[1] = centoid_blue; //top-left
-        source_points[2] = centoid_green; //bottom-right
-        source_points[3] = centoid_yellow; //top-right
-        
-        dest_points[0] = Point(0,0);
-        dest_points[1] = Point(maxWidth - 1,0);
-        dest_points[2] = Point(maxWidth - 1, maxHeight - 1);
-        dest_points[3] = Point(0, maxHeight);
-        
-        Mat m = getPerspectiveTransform(source_points, dest_points);
-        warpPerspective(origin, output, m, Size(maxWidth, maxHeight) );
-        imshow("output", output);
-        imshow("input" , origin);
-        waitKey(10);
-    }
 
-}
+//    cvtColor(img, img, CV_BGR2HSV);
+    Mat yellowMat, greenMat, pinkMat, orangeMat;
+    
+    inRange(img, Scalar(110,180,150), Scalar(140,255,255), greenMat);
+    inRange(img, Scalar(90,150,215), Scalar(100,255,255), orangeMat);
+    inRange(img, Scalar(240,170,170), Scalar(250,200,255), pinkMat);
+    inRange(img, Scalar(50,170,170), Scalar(70,255,255), yellowMat);
+    
+    medianBlur(yellowMat, yellowMat, 3);
+    medianBlur(orangeMat, orangeMat, 3);
+    medianBlur(pinkMat, pinkMat, 3);
+    medianBlur(greenMat, greenMat, 3);
+    output = greenMat + orangeMat + pinkMat + yellowMat;
+    
+    Mat canny_yellow,canny_pink,canny_green,canny_orange;
+    vector<vector<Point> > contour_yellow,contour_pink,contour_green,contour_orange;
+    vector<Vec4i> hierarchy;
+    
 
-//////////////////////////////////////// Main Feature /////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////////////////////////////
-void mainFeature(){
-    /// Using 50 bins for hue and 60 for saturation
-    int h_bins = 50; int s_bins = 60;
-    int histSize[] = { h_bins, s_bins };
-    // hue varies from 0 to 179, saturation from 0 to 255
-    float h_ranges[] = { 0, 180 };
-    float s_ranges[] = { 0, 256 };
-    const float* ranges[] = { h_ranges, s_ranges };
-    // Use the o-th and 1-st channels
-    int channels[] = { 0, 1 };
-    MatND hist_base;
-    
-    Mat mask6(HEIGHT, WIDTH, CV_8UC1, Scalar(0));
-    rectangle(mask6,
-              cv::Point(100, 100),
-              cv::Point(170, 150),
-              cv::Scalar(255, 255, 255),
-              CV_FILLED
-              );
-    
-    Rect cropRect(100,100,70,50);
-    
-    namedWindow("CropFrame");
-    namedWindow("input");
-    namedWindow("output");
-    
-    Mat cropFrame(HEIGHT, WIDTH, CV_8UC3, Scalar(0));
-    Mat copyInput(HEIGHT, WIDTH, CV_8UC3, Scalar(0));
-    Mat output(204, 380, CV_8UC3, Scalar(0));
-    
-    string vidPath = DataManager::getInstance().FULL_PATH_VIDEO + "dumb1.mp4";
-    VideoCapture cap(vidPath);
-    
-    double comparedResult = 1;
-    bool isFirstFrame = true;
-    bool isCarOccupied = false;
-    Scalar colorGreen(0,200,0);
-    Scalar colorRed(0,0,200);
-    
-    while(1){
-        Mat frame;
-        cap.read(frame);
-        frame.copyTo(copyInput);
-        
-        frame(cropRect).copyTo(cropFrame);
-        imshow("CropFrame", cropFrame);
-        
-        
-        if(isFirstFrame){
-            cvtColor( frame, frame, COLOR_BGR2HSV );
-            /// Calculate the histograms for the HSV images
-            calcHist( &frame, 1, channels, mask6, hist_base, 2, histSize, ranges, true, false );
-            normalize( hist_base, hist_base, 0, 1, NORM_MINMAX, -1, Mat() );
-            isFirstFrame = false;
-            continue;
-        }
-        
-        MatND hist_target;
-        
-        cvtColor( frame, frame, COLOR_BGR2HSV );
-        /// Calculate the histograms for the HSV images
-        calcHist( &frame, 1, channels, mask6, hist_target, 2, histSize, ranges, true, false );
-        normalize( hist_target, hist_target, 0, 1, NORM_MINMAX, -1, Mat() );
-        
-        //initial output string
-        stringstream ss[4];
-        rectangle(output, cv::Point(0, 0), cv::Point(380,204),
-                  cv::Scalar(255,255,255), -1);
-        
-        
-        
-        /// Apply the histogram comparison methods
-        for( int compare_method = 0; compare_method < DataManager::getInstance().compareMethod.size(); compare_method++ )
-        {
-            comparedResult = compareHist( hist_base, hist_target, compare_method );
-            
-            ss[compare_method] << DataManager::getInstance().compareMethod[compare_method] << ": "
-            << to_string(comparedResult);
-        }
-        
-        comparedResult = compareHist( hist_base, hist_target, 0 );
-        //smooth jitter
-        //        comparedResult = comparedResult * (0.2) + (0.8) * compareHist( hist_base, hist_target, 0 );
-        
-        string frameNumberString1 = ss[0].str();
-        string frameNumberString2 = ss[1].str();
-        string frameNumberString3 = ss[2].str();
-        string frameNumberString4 = ss[3].str();
-        
-        putText(output, frameNumberString1.c_str(), cv::Point(15, 20),
-                FONT_HERSHEY_SIMPLEX, 0.5 , cv::Scalar(0,0,0));
-        putText(output, frameNumberString2.c_str(), cv::Point(15, 40),
-                FONT_HERSHEY_SIMPLEX, 0.5 , cv::Scalar(0,0,0));
-        putText(output, frameNumberString3.c_str(), cv::Point(15, 60),
-                FONT_HERSHEY_SIMPLEX, 0.5 , cv::Scalar(0,0,0));
-        putText(output, frameNumberString4.c_str(), cv::Point(15, 80),
-                FONT_HERSHEY_SIMPLEX, 0.5 , cv::Scalar(0,0,0));
-        
-        if(comparedResult <= 0.45)
-        isCarOccupied = true;
-        else
-        isCarOccupied = false;
-        
-        if(isCarOccupied)
-        rectangle(copyInput,
-                  cv::Point(100, 100),
-                  cv::Point(170, 150),
-                  colorRed,
-                  CV_FILLED
-                  );
-        else
-        rectangle(copyInput,
-                  cv::Point(100, 100),
-                  cv::Point(170, 150),
-                  colorGreen,
-                  CV_FILLED
-                  );
-        
-        imshow("input", copyInput);
-        imshow("output", output);
-        
-        waitKey(30);
-    }
-}
+    Canny( yellowMat, canny_yellow, 100, 200, 3 );
+    Canny( orangeMat, canny_orange, 100, 200, 3 );
+    Canny( pinkMat, canny_pink, 100, 200, 3 );
+    Canny( greenMat, canny_green, 100, 200, 3 );
 
-
-void testFeature(){
-    string imgPath1 = DataManager::getInstance().FULL_PATH_PHOTO + "boom.jpg";
-    string imgPath2 = DataManager::getInstance().FULL_PATH_PHOTO + "boom_bg.jpg";
-
-    namedWindow("ORB");
-    namedWindow("test");
-    namedWindow("first");
-    namedWindow("output");
+    findContours( canny_yellow, contour_yellow, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+    findContours( canny_pink, contour_pink, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+    findContours( canny_green, contour_green, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+    findContours( canny_orange, contour_orange, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
     
-//    Mat img_1 = imread(imgPath1);
-    Mat img_1;
-//    VideoCapture cap(0);
-//    cap.set(CV_CAP_PROP_FRAME_WIDTH,640);
-//    cap.set(CV_CAP_PROP_FRAME_HEIGHT,480);
+    cv::Point centoid_yellow,centoid_red,centoid_green,centoid_blue;
     
-    string vidPath = DataManager::getInstance().FULL_PATH_VIDEO + "dumb1.mp4";
-    VideoCapture cap(vidPath);
+    cv::Moments momYellow= cv::moments(cv::Mat(contour_yellow[0]));
+    cv::Moments momRed= cv::moments(cv::Mat(contour_pink[0]));
+    cv::Moments momGreen= cv::moments(cv::Mat(contour_green[0]));
+    cv::Moments momBlue= cv::moments(cv::Mat(contour_orange[0]));
     
-    bool isFirstFrame = true;
+    centoid_yellow =  Point(momYellow.m10/momYellow.m00,momYellow.m01/momYellow.m00);
+    centoid_red = Point(momRed.m10/momRed.m00,momRed.m01/momRed.m00);
+    centoid_green = Point(momGreen.m10/momGreen.m00,momGreen.m01/momGreen.m00);
+    centoid_blue = Point(momBlue.m10/momBlue.m00,momBlue.m01/momBlue.m00);
     
-//    Ptr<Feature2D> orb =  xfeatures2d::SIFT::create();
-    Ptr<Feature2D> orb = ORB::create();
-    std::vector<KeyPoint> keypoints_1, keypoints_2, test;
-    BFMatcher matcher;
-    Mat descriptors_1, descriptors_2;
+    // compute the width of the new image, which will be the
+    // maximum distance between bottom-right and bottom-left
+    // x-coordiates or the top-right and top-left x-coordinates
+    double widthA = sqrt(
+                         pow(centoid_red.x - centoid_yellow.x, 2) +
+                         pow(centoid_red.y - centoid_yellow.y, 2)
+                         );
+    double widthB = sqrt(
+                         pow(centoid_green.x - centoid_blue.x, 2) +
+                         pow(centoid_green.y - centoid_blue.y, 2)
+                         );
+    double maxWidth = max(int(widthA), int(widthB));
     
-    Rect cropRect(90,100,90,100);
+    // compute the height of the new image, which will be the
+    // maximum distance between the top-right and bottom-right
+    // y-coordinates or the top-left and bottom-left y-coordinates
+    double heightA = sqrt(
+                          pow((centoid_green.x - centoid_red.x),2) +
+                          pow((centoid_green.y - centoid_red.y),2)
+                          );
+    double heightB = sqrt(
+                          pow((centoid_blue.x - centoid_yellow.x),2) +
+                          pow((centoid_blue.y - centoid_yellow.y),2)
+                          );
+    double maxHeight = max(int(heightA), int(heightB));
     
-    bool isCarOccupied = false;
-    int firstFrameCount = 0;
-    Scalar colorGreen(0,200,0);
-    Scalar colorRed(0,0,200);
+    cv::Point2f source_points[4];
+    cv::Point2f dest_points[4];
     
-    Mat fObj;
-    Mat bg;
-    Mat out1;
-    Mat out;
-    while(1){
-        cap.read(bg);
-        
-        if(isFirstFrame){
-            cap.read(img_1);
-            img_1(cropRect).copyTo(fObj);
-            orb->detect( fObj, keypoints_1 );
-            orb->detect(img_1, test);
-//            orb->compute( fObj, keypoints_1, descriptors_1 );
-            drawKeypoints(fObj, keypoints_1, out1);
-            Mat qq;
-            drawKeypoints(img_1, test, qq);
-            imshow("test",qq);
-            imshow("first", out1);
-            isFirstFrame = false;
-            
-            for(vector<int>::size_type i = 0; i != keypoints_2.size(); i++) {
-                firstFrameCount++;
-            }
-            continue;
-        }
-        
+    source_points[0] = centoid_blue;
+    source_points[1] = centoid_red;
+    source_points[2] = centoid_green;
+    source_points[3] = centoid_yellow;
     
-        
-        orb->detect( bg, keypoints_2 );
-//        orb->compute( bg, keypoints_2, descriptors_2 );
-        
-        
-//        std::vector< DMatch > matches;
-//        matcher.match( descriptors_1, descriptors_2, matches );
-//        
-//        nth_element(matches.begin(), matches.begin()+24, matches.end());
-//        matches.erase(matches.begin() + 25, matches.end());
-//        
-//        drawMatches(img_1, keypoints_1, bg, keypoints_2, matches, out);
-        
-        int count = 0;
-        for(vector<int>::size_type i = 0; i != keypoints_2.size(); i++) {
-            if(keypoints_2[i].pt.x >= 90 && keypoints_2[i].pt.x <= 180 && keypoints_2[i].pt.y >= 100 && keypoints_2[i].pt.y <= 200)
-                count++;
-        }
-        
-        drawKeypoints(bg, keypoints_2, out);
-//        cout << to_string(count) << endl;
-        
-        if((count - firstFrameCount) > 30)
-            isCarOccupied = true;
-        else
-            isCarOccupied = false;
-        
-        if(isCarOccupied)
-            rectangle(bg,
-                      cv::Point(100, 100),
-                      cv::Point(170, 150),
-                      colorRed,
-                      CV_FILLED
-                      );
-        else
-            rectangle(bg,
-                      cv::Point(100, 100),
-                      cv::Point(170, 150),
-                      colorGreen,
-                      CV_FILLED
-                      );
-        
-        imshow("ORB", out);
-        waitKey(30);
-    }
-}
-
-void showFastCorner(string pname){
-    Mat out;
-    Mat img;
-    namedWindow("FAST");
-    string imgPath1 = DataManager::getInstance().FULL_PATH_PHOTO + pname;
-    img = imread(imgPath1);
-    Mat output(img.rows, img.cols, CV_8UC1, Scalar(255));
-    cvtColor( img, img, CV_BGR2GRAY );
-    vector<KeyPoint> keypoints;
-    FAST(img,keypoints,10,true);
-    drawKeypoints(output, keypoints, output);
-    imshow( "FAST", output );
+    dest_points[0] = Point(0,0);
+    dest_points[1] = Point(maxWidth - 1,0);
+    dest_points[2] = Point(maxWidth - 1, maxHeight - 1);
+    dest_points[3] = Point(0, maxHeight);
+    
+    Mat m = getPerspectiveTransform(source_points, dest_points);
+    warpPerspective(img, output, m, Size(maxWidth, maxHeight) );
+    imshow("output", output);
     waitKey(0);
+
+
 }
 
 
-void showSurfFeature(string pname){
-    Mat out;
-    Mat img;
-    namedWindow("SURF");
-    string imgPath1 = DataManager::getInstance().FULL_PATH_PHOTO + pname;
-    img = imread(imgPath1);
 
-    Ptr<Feature2D> surf =  xfeatures2d::SURF::create();
-    
-    //-- Step 1: Detect the keypoints:
-    std::vector<KeyPoint> keypoints_1, keypoints_2;
-    surf->detect( img, keypoints_1 );
-    
-    //-- Step 2: Calculate descriptors (feature vectors)
-    Mat descriptors_1, descriptors_2;
-    surf->compute( img, keypoints_1, descriptors_1 );
 
-    drawKeypoints(img, keypoints_1, out);
-    imshow("SURF", out);
-    
-    waitKey(0);
-    
-}
+
 
 void showSiftFeature(string pname){
     Mat out;
     Mat img;
     Mat distance;
     namedWindow("SIFT");
-    string imgPath1 = DataManager::getInstance().FULL_PATH_PHOTO +pname;
+    string imgPath1 = PHOTO_PATH +pname;
     img = imread(imgPath1);
-    
+//    img = imread(pname);
+    imshow("SIFT", img);
 //    cvtColor(img, img, CV_BGR2GRAY);
 //    bitwise_not ( img, img );
 //    threshold( img, img, 185, 255,CV_THRESH_BINARY );
@@ -435,55 +186,14 @@ void showSiftFeature(string pname){
     //-- Step 2: Calculate descriptors (feature vectors)
     Mat descriptors_1, descriptors_2;
     sift->compute( img, keypoints_1, descriptors_1 );
+//    cout << keypoints_1.size() << endl;
     
     drawKeypoints(img, keypoints_1, out);
     imshow("SIFT", out);
     waitKey(0);
 }
 
-void showORBFeature(string pname){
-    Mat out;
-    Mat img;
-    namedWindow("ORB");
 
-    string imgPath1 = DataManager::getInstance().FULL_PATH_PHOTO + pname;
-    img = imread(imgPath1);
-
-    
-    Ptr<Feature2D> orb = ORB::create();
-    
-    //-- Step 1: Detect the keypoints:
-    std::vector<KeyPoint> keypoints_1, keypoints_2, tmpKey;
-    orb->detect( img, keypoints_1 );
-    
-    //-- Step 2: Calculate descriptors (feature vectors)
-    Mat descriptors_1, descriptors_2;
-    orb->compute( img, keypoints_1, descriptors_1 );
-    
-    drawKeypoints(img, keypoints_1, out);
-    imshow("ORB", out);
-
-    
-    waitKey(0);
-}
-
-
-vector<KeyPoint> getFastKeyPoint(string pname){
-    Mat img;
-    string imgPath = DataManager::getInstance().FULL_PATH_PHOTO + pname;
-    img = imread(imgPath);
-    cvtColor( img, img, CV_BGR2GRAY );
-    vector<KeyPoint> keypoints;
-    FAST(img,keypoints,10,true);
-    return keypoints;
-}
-
-vector<KeyPoint> getFastKeyPoint_tmp(Mat img){
-    cvtColor( img, img, CV_BGR2GRAY );
-    vector<KeyPoint> keypoints;
-    FAST(img,keypoints,10,true);
-    return keypoints;
-}
 vector<KeyPoint> getSiftKeyPoint_tmp(Mat img){
     Ptr<Feature2D> sift = xfeatures2d::SIFT::create();
     std::vector<KeyPoint> keypoints;
@@ -493,33 +203,11 @@ vector<KeyPoint> getSiftKeyPoint_tmp(Mat img){
 
 vector<KeyPoint> getSiftKeyPoint(string pname){
     Mat img;
-    string imgPath = DataManager::getInstance().FULL_PATH_PHOTO + pname;
+    string imgPath = PHOTO_PATH + pname;
     img = imread(imgPath);
     Ptr<Feature2D> sift = xfeatures2d::SIFT::create();
     std::vector<KeyPoint> keypoints;
     sift->detect( img, keypoints);
-    
-    return keypoints;
-}
-
-vector<KeyPoint> getSurfKeyPoint(string pname){
-    Mat img;
-    string imgPath = DataManager::getInstance().FULL_PATH_PHOTO + pname;
-    img = imread(imgPath);
-    Ptr<Feature2D> surf = xfeatures2d::SURF::create();
-    std::vector<KeyPoint> keypoints;
-    surf->detect( img, keypoints);
-    
-    return keypoints;
-}
-
-vector<KeyPoint> getOrbKeyPoint(string pname){
-    Mat img;
-    string imgPath = DataManager::getInstance().FULL_PATH_PHOTO + pname;
-    img = imread(imgPath);
-    Ptr<Feature2D> orb = ORB::create();
-    std::vector<KeyPoint> keypoints;
-    orb->detect( img, keypoints);
     
     return keypoints;
 }
@@ -548,11 +236,13 @@ void predictionStep(){
     
     //positive training set
     
-    string carName = DataManager::getInstance().FULL_PATH_PHOTO + "/car_set/car";
-    for (int index = 1; index <= MAX_CAR - 40; index++) {
+    string carName = PHOTO_PATH + "/car_set/car";
+    for (int index = TRAIN_MIN; index <= TRAIN_MAX; index++) {
+        if(index >= TEST_MIN && index <= TEST_MAX)
+            continue;
         string picName = carName + to_string(index) + extension;
         Mat input = imread(picName, CV_LOAD_IMAGE_GRAYSCALE);
-        
+        cout << "Positive Train "<<picName << endl;
         //To store the keypoints that will be extracted by SIFT
         vector<KeyPoint> keypoints;
         //Detect SIFT keypoints (or feature points)
@@ -563,16 +253,22 @@ void predictionStep(){
         bowDE.compute2(input,keypoints,bowDescriptor);
         trainingSet.push_back(bowDescriptor);
         labelsMat.push_back(1);
+        
+        if(index == TRAIN_MIN){
+            cout << bowDescriptor << endl;
+        }
     }
     
     //negative training set
     
-    string floorName = DataManager::getInstance().FULL_PATH_PHOTO + "/not_car_set/notcar";
+    string floorName = PHOTO_PATH + "/not_car_set/notcar";
     Mat tranningNegative;
-    for (int index = 1; index <= MAX_NOT_CAR; index++) {
+    for (int index = TRAIN_MIN; index <= TRAIN_MAX; index++) {
+        if(index >= TEST_MIN && index <= TEST_MAX)
+            continue;
         string picName = floorName + to_string(index) + extension;
         Mat input = imread(picName, CV_LOAD_IMAGE_GRAYSCALE);
-        
+        cout << "Negative Train "<<picName << endl;
         //To store the keypoints that will be extracted by SIFT
         vector<KeyPoint> keypoints;
         //Detect SIFT keypoints (or feature points)
@@ -595,6 +291,289 @@ void predictionStep(){
     //release the file storage
     allDes.release();
     
+    
+    ///////// train SVM ////////
+    Ptr<SVM> svm = ml::SVM::create();
+//    svm->setType(ml::SVM::C_SVC);
+//    svm->setGamma(30);
+//    svm->setKernel(ml::SVM::RBF);
+//    svm->setTermCriteria(cv::TermCriteria(TermCriteria::MAX_ITER, 1000, 1e-6));
+//    svm->train(trainingSet, ml::ROW_SAMPLE, labelsMat);
+//    cv::FileStorage fss("hyperplain_svm.xml",cv::FileStorage::WRITE);
+//    svm->write(fss);
+//    fss.release();
+//    {
+//        cv::FileStorage fs("hyperplain_svm.xml", cv::FileStorage::APPEND);
+//        fs << "format" << 3; // So "isLegacy" return false;
+//    }
+//    fs.release();
+    
+//    cv::FileStorage read("hyperplain_svm.xml",
+//                         cv::FileStorage::READ);
+//    auto svm = cv::ml::SVM::create();
+//    svm->read(read.root());
+//    Ptr<SVM> svm = ml::SVM::load<SVM>("hyperplain_svm.xml");
+//    cout << svm->getGamma() << endl;
+    
+    
+    
+    
+    ///////// prediction /////////
+    ofstream myfile;
+    myfile.open (RESULT);
+    
+    int falseNegative = 0, falsePositive = 0;
+    for (int index = TEST_MIN; index <= TEST_MAX; index++) {
+        string targetPhoto = PHOTO_PATH + "/car_set/car"
+                            + to_string(index)+ extension;
+        
+        cout << "Positive Test "<< targetPhoto << endl;
+        Mat img=imread(targetPhoto, CV_LOAD_IMAGE_GRAYSCALE);
+        vector<KeyPoint> targetKeypoints;
+        detector->detect(img,targetKeypoints);
+        Mat targetBowDescriptor;
+        bowDE.compute2(img,targetKeypoints,targetBowDescriptor);
+        float response = svm->predict(targetBowDescriptor);
+        if(response == -1) falseNegative++;
+        myfile << "car" << to_string(index) << " = " << to_string(response) << endl;
+    }
+    for (int index = TEST_MIN ; index <= TEST_MAX; index++) {
+        string targetPhoto = PHOTO_PATH + "/not_car_set/notcar"
+                            + to_string(index) + extension;
+        
+        cout << "Negative Test "<< targetPhoto << endl;
+        Mat img=imread(targetPhoto, CV_LOAD_IMAGE_GRAYSCALE);
+        vector<KeyPoint> targetKeypoints;
+        detector->detect(img,targetKeypoints);
+        Mat targetBowDescriptor;
+        bowDE.compute2(img,targetKeypoints,targetBowDescriptor);
+        float response = svm->predict(targetBowDescriptor);
+        if(response == 1) falsePositive++;
+        myfile << "notcar" << to_string(index) << " = " << to_string(response) << endl;
+    }
+    myfile << endl << endl;
+    myfile << "false positive = " << to_string(falsePositive) << endl;
+    myfile << "false negative = " << to_string(falseNegative) << endl;
+    myfile.close();
+    
+    
+//    string named = "Predict Car";
+////    string targetPhoto = DataManager::getInstance().FULL_PATH_PHOTO + "/car_set/slot16.jpg";
+//    string targetPhoto = "/Users/synycboom/Desktop/slot12.jpg";
+//    Mat img=imread(targetPhoto, CV_LOAD_IMAGE_GRAYSCALE);
+//    vector<KeyPoint> targetKeypoints;
+//    detector->detect(img,targetKeypoints);
+//    Mat targetBowDescriptor;
+//    bowDE.compute2(img,targetKeypoints,targetBowDescriptor);
+//    float response = svm->predict(targetBowDescriptor);
+//    
+//    cv::FileStorage fss("hyperplain_svm.xml",cv::FileStorage::WRITE);
+//    svm->save("hyperplain_svm.xml");
+//    
+//    cout << "Predict: " << response << endl;
+//    imshow(named, img);
+//    waitKey(0);
+    
+}
+
+void createDictionary(){
+    
+    Ptr<Feature2D> sift = xfeatures2d::SIFT::create();
+    string folderPath = PHOTO_PATH + "car_set";
+
+    Mat unclusteredDescriptors;
+    vector<string> fileList;
+    ls(folderPath,&fileList);
+    
+    char extension[] = ".png";
+    for (auto &str : fileList){
+        const char* fileName = str.c_str();
+        if(strcspn(fileName, extension) > 0){
+            string filePath = PHOTO_PATH + "car_set/" + fileName;
+//            cout << filePath << endl;
+            Mat descriptor;
+            vector<KeyPoint> keypoints;
+            Mat input = imread(filePath, CV_LOAD_IMAGE_GRAYSCALE);
+            keypoints = getSiftKeyPoint_tmp(input);
+            sift->compute(input, keypoints, descriptor);
+            unclusteredDescriptors.push_back(descriptor);
+        }
+    }
+    cout << "====== Start Training =======" <<endl;
+    int dictionarySize= 1000;
+    TermCriteria tc(CV_TERMCRIT_ITER,100, 1e-6);
+    int retries=1;
+    int flags=KMEANS_PP_CENTERS;
+    BOWKMeansTrainer bowTrainer(dictionarySize,tc,retries,flags);
+    Mat dictionary = bowTrainer.cluster(unclusteredDescriptors);
+    
+    FileStorage fs("dictionary.yml", FileStorage::WRITE);
+    fs << "vocabulary" << dictionary;
+    fs.release();
+    cout << "====== Training Ended =======" <<endl;
+}
+
+int main(int argc, const char * argv[]) {
+    
+
+    
+#if CODE_SEGMENT == 1
+//    predictionStep();
+    cropImage();
+//    createDictionary();
+    
+    
+
+#elif CODE_SEGMENT == 2
+    if(argc != 4){
+        cout << "usage: ./Predictor dictionaryFile hyperplainFile inputFile" << endl;
+        return 1;
+    }
+    string dictionary_file = argv[1];
+    string hyperplain_file = argv[2];
+    string input_file = argv[3];
+    
+    //prepare BOW descriptor extractor from the dictionary
+    Mat dictionary;
+    FileStorage fs(dictionary_file, FileStorage::READ);
+    fs["vocabulary"] >> dictionary;
+    fs.release();
+    
+    Ptr<FeatureDetector> detector = xfeatures2d::SIFT::create();
+    Ptr<DescriptorExtractor> extractor = xfeatures2d::SIFT::create();
+    Ptr<DescriptorMatcher> matcher = FlannBasedMatcher::create("FlannBased");
+    //create BoF (or BoW) descriptor extractor
+    BOWImgDescriptorExtractor bowDE(extractor,matcher);
+    //Set the dictionary with the vocabulary we created in the first step
+    bowDE.setVocabulary(dictionary);
+    
+    
+//    Ptr<SVM> svm = StatModel::load<SVM>(hyperplain_file);
+    FileStorage in(hyperplain_file, FileStorage::READ);
+    Ptr<SVM> svm = StatModel::read<SVM>(in.getFirstTopLevelNode());
+    string named = "Predict Car";
+    Mat img=imread(input_file, CV_LOAD_IMAGE_GRAYSCALE);
+    vector<KeyPoint> targetKeypoints;
+    detector->detect(img,targetKeypoints);
+    Mat targetBowDescriptor;
+    bowDE.compute2(img,targetKeypoints,targetBowDescriptor);
+    float response = svm->predict(targetBowDescriptor);
+    cout << "Predict: " << response << endl;
+    
+    namedWindow("keypoint");
+    Mat test;
+    drawKeypoints(img, targetKeypoints, test);
+    imshow("keypoint", test);
+    waitKey(0);
+
+#elif CODE_SEGMENT == 3
+//for Descriptor extracting
+    if(argc != 7){
+        cout << "usage: ./ dictionaryFile carSetPath/ carAmount notCarSetPath/ notCarAmount outputPath" << endl;
+        return 1;
+    }
+    
+    string dictionaryFile = argv[1];
+    string carPath        = argv[2];
+    string carAmount      = argv[3];
+    string notCarPath     = argv[4];
+    string notCarAmount   = argv[5];
+    string outputPath     = argv[6];
+    
+    if( carPath.at(carPath.length() - 1) == '/')
+        carPath += "car";
+    else
+       carPath += "/car";
+    
+    if( notCarPath.at(notCarPath.length() - 1) == '/')
+        notCarPath += "notcar";
+    else
+        notCarPath += "/notcar";
+    
+    if( outputPath.at(outputPath.length() - 1) != '/')
+        outputPath += "/";
+        
+    
+    Mat dictionary;
+    FileStorage dictFile(dictionaryFile, FileStorage::READ);
+    dictFile["vocabulary"] >> dictionary;
+    dictFile.release();
+    
+    Ptr<FeatureDetector> detector = xfeatures2d::SIFT::create();
+    Ptr<DescriptorExtractor> extractor = xfeatures2d::SIFT::create();
+    Ptr<DescriptorMatcher> matcher = FlannBasedMatcher::create("FlannBased");
+    BOWImgDescriptorExtractor bowDE(extractor,matcher);
+    bowDE.setVocabulary(dictionary);
+    
+    FileStorage descriptors( outputPath + "Descriptors.yml", FileStorage::WRITE);
+    FileStorage labels( outputPath + "Labels.yml", FileStorage::WRITE);
+    string descriptorTag = "descriptor";
+    string labelTag = "label";
+    
+    string extension = ".jpg";
+    Mat trainingSet;
+    Mat labelsMat;
+    
+    namedWindow("pos");
+    
+    //positive training set
+   
+    for (int index = 1; index <= stoi(carAmount); index++) {
+        string picName = carPath + to_string(index) + extension;
+        Mat input = imread(picName, CV_LOAD_IMAGE_GRAYSCALE);
+        vector<KeyPoint> keypoints;
+        detector->detect(input,keypoints);
+        Mat bowDescriptor;
+        bowDE.compute2(input,keypoints,bowDescriptor);
+        trainingSet.push_back(bowDescriptor);
+        labelsMat.push_back(1);
+    }
+    
+    //negative training set
+    for (int index = 1; index <= stoi(notCarAmount); index++) {
+        string picName = notCarPath + to_string(index) + extension;
+        Mat input = imread(picName, CV_LOAD_IMAGE_GRAYSCALE);
+        vector<KeyPoint> keypoints;
+        detector->detect(input,keypoints);
+        Mat bowDescriptor;
+        bowDE.compute2(input,keypoints,bowDescriptor);
+        trainingSet.push_back(bowDescriptor);
+        labelsMat.push_back(-1);
+    }
+    
+    descriptors << descriptorTag << trainingSet;
+    labels << labelTag << labelsMat;
+
+    descriptors.release();
+    labels.release();
+
+    return 0;
+    
+#elif CODE_SEGMENT == 4
+//Predictor Service
+    if(argc != 4){
+        cout << "usage: ./ descriptorPath labelPath portNum" << endl;
+        return 1;
+    }
+    
+    string descriptorPath = argv[1];
+    string labelPath      = argv[2];
+    string portNum        = argv[3];
+    const char *portNumber = portNum.c_str();
+    
+    string descriptorTag = "descriptor";
+    string labelTag = "label";
+    
+    Mat trainingSet, labelsMat;
+    
+    FileStorage descriptorFile(descriptorPath, FileStorage::READ);
+    descriptorFile[descriptorTag] >> trainingSet;
+    descriptorFile.release();
+    
+    FileStorage labelFile(labelPath, FileStorage::READ);
+    labelFile[labelTag] >> labelsMat;
+    labelFile.release();
+    
     ///////// train SVM ////////
     Ptr<SVM> svm = ml::SVM::create();
     svm->setType(ml::SVM::C_SVC);
@@ -603,125 +582,187 @@ void predictionStep(){
     svm->setTermCriteria(cv::TermCriteria(TermCriteria::MAX_ITER, 1000, 1e-6));
     svm->train(trainingSet, ml::ROW_SAMPLE, labelsMat);
     
-    ///////// prediction /////////
-//    ofstream myfile;
-//    myfile.open ("RBF.txt");
-//    
-//    int falseNegative = 0, falsePositive = 0;
-//    for (int index = 1; index <= MAX_CAR; index++) {
-//        string targetPhoto = DataManager::getInstance().FULL_PATH_PHOTO + "/car_set/car"
-//                            + to_string(index)+ extension;
-//        Mat img=imread(targetPhoto, CV_LOAD_IMAGE_GRAYSCALE);
-//        vector<KeyPoint> targetKeypoints;
-//        detector->detect(img,targetKeypoints);
-//        Mat targetBowDescriptor;
-//        bowDE.compute2(img,targetKeypoints,targetBowDescriptor);
-//        float response = svm->predict(targetBowDescriptor);
-//        if(response == -1) falseNegative++;
-//        myfile << "car" << to_string(index) << " = " << to_string(response) << endl;
-//    }
-//    for (int index = 1; index <= MAX_NOT_CAR; index++) {
-//        string targetPhoto = DataManager::getInstance().FULL_PATH_PHOTO + "/not_car_set/notcar"
-//                            + to_string(index) + extension;
-//        Mat img=imread(targetPhoto, CV_LOAD_IMAGE_GRAYSCALE);
-//        vector<KeyPoint> targetKeypoints;
-//        detector->detect(img,targetKeypoints);
-//        Mat targetBowDescriptor;
-//        bowDE.compute2(img,targetKeypoints,targetBowDescriptor);
-//        float response = svm->predict(targetBowDescriptor);
-//        if(response == 1) falsePositive++;
-//        myfile << "notcar" << to_string(index) << " = " << to_string(response) << endl;
-//    }
-//    myfile << endl << endl;
-//    myfile << "false positive = " << to_string(falsePositive) << endl;
-//    myfile << "false negative = " << to_string(falseNegative) << endl;
-//    myfile.close();
+    int status;
+    struct addrinfo host_info;       // The struct that getaddrinfo() fills up with data.
+    struct addrinfo *host_info_list; // Pointer to the to the linked list of host_info's.
     
+    // The MAN page of getaddrinfo() states "All  the other fields in the structure pointed
+    // to by hints must contain either 0 or a null pointer, as appropriate." When a struct
+    // is created in C++, it will be given a block of memory. This memory is not necessary
+    // empty. Therefor we use the memset function to make sure all fields are NULL.
+    memset(&host_info, 0, sizeof host_info);
     
-    string named = "Predict Car";
-    string targetPhoto = DataManager::getInstance().FULL_PATH_PHOTO + "/car_set/car4.jpg";
-    Mat img=imread(targetPhoto, CV_LOAD_IMAGE_GRAYSCALE);
-    vector<KeyPoint> targetKeypoints;
-    detector->detect(img,targetKeypoints);
-    Mat targetBowDescriptor;
-    bowDE.compute2(img,targetKeypoints,targetBowDescriptor);
-    float response = svm->predict(targetBowDescriptor);
-    cout << "Predict: " << response << endl;
-    imshow(named, img);
-    waitKey(0);
+    cout << "Setting up the structs..."  << std::endl;
     
-}
-
-int main(int argc, const char * argv[]) {
+    host_info.ai_family = AF_UNSPEC;     // IP version not specified. Can be both.
+    host_info.ai_socktype = SOCK_STREAM; // Use SOCK_STREAM for TCP or SOCK_DGRAM for UDP.
+    host_info.ai_flags = AI_PASSIVE;
     
-#if DICTIONARY_BUILD == 1
+    // Now fill up the linked list of host_info structs with google's address information.
+    status = getaddrinfo(NULL, portNumber , &host_info, &host_info_list);
+    // getaddrinfo returns 0 on succes, or some other value when an error occured.
+    // (translated into human readable text by the gai_gai_strerror function).
+    if (status != 0)  std::cout << "getaddrinfo error: \n" << gai_strerror(status) ;
     
-    vector<KeyPoint> siftKeypoints, surfKeypoints, orbKeypoints, fastKeypoints, parkingKeyPoints;
+    cout << "Creating a socket..."  << std::endl;
+    int socketfd ; // The socket descripter
+    socketfd = socket(host_info_list->ai_family, host_info_list->ai_socktype,
+                      host_info_list->ai_protocol);
+    if (socketfd == -1)  std::cout << "socket error " ;
     
-    Ptr<Feature2D> sift = xfeatures2d::SIFT::create();
+    std::cout << "Binding socket..."  << std::endl;
+    // we make use of the setsockopt() function to make sure the port is not in use.
+    // by a previous execution of our code. (see man page for more information)
+    int yes = 1;
+    status = setsockopt(socketfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+    status = ::bind(socketfd,host_info_list->ai_addr, host_info_list->ai_addrlen);
+    if (status == -1)  std::cout << "bind error" << std::endl ;
     
-    string tmpName = DataManager::getInstance().FULL_PATH_PHOTO + "/car_set/car";
-    string surname = ".jpg";
-    Mat unclusteredDescriptors;
-    for (int index = 1; index <= 114; index++) {
-        Mat descriptor;
-        vector<KeyPoint> keypoints;
-        string picName = tmpName + to_string(index) + surname;
-        Mat input = imread(picName, CV_LOAD_IMAGE_GRAYSCALE);
-        keypoints = getSiftKeyPoint_tmp(input);
-        sift->compute(input, keypoints, descriptor);
-        unclusteredDescriptors.push_back(descriptor);
+    std::cout << "Listening for connections..."  << std::endl;
+    status =  listen(socketfd, 1);
+    if (status == -1)  std::cout << "listen error" << std::endl ;
+    
+    while(true){
+        
+        int new_sd;
+        struct sockaddr_storage their_addr;
+        socklen_t addr_size = sizeof(their_addr);
+        new_sd = accept(socketfd, (struct sockaddr *)&their_addr, &addr_size);
+        if (new_sd == -1)
+        {
+            std::cout << "listen error" << std::endl ;
+        }
+        else
+        {
+            std::cout << "Connection accepted. Using new socketfd : "  <<  new_sd << std::endl;
+        }
+        
+        
+        std::cout << "Waiting to recieve descriptor file"  << std::endl;
+        ssize_t bytes_recieved;
+        char incomming_data_buffer[1000];
+        bytes_recieved = recv(new_sd, incomming_data_buffer,1000, 0);
+        // If no data arrives, the program will just wait here until some data arrives.
+        if (bytes_recieved == 0) std::cout << "host shut down." << std::endl ;
+        if (bytes_recieved == -1)std::cout << "recieve error!" << std::endl ;
+        std::cout << bytes_recieved << " descriptor file recieved :" << std::endl ;
+        incomming_data_buffer[bytes_recieved] = '\0';
+        std::cout << incomming_data_buffer << std::endl;
+        
+        ///////////////////////////////////////////////////////////////////////////////////////////////
+        ///////////////////////////////////////////Prediction//////////////////////////////////////////
+        string inputFile(incomming_data_buffer);
+        string inputDescriptorTag = "inputDescriptor";
+        FileStorage inputDescriptorFile(inputFile,FileStorage::READ);
+        Mat inputDescriptor;
+        inputDescriptorFile[inputDescriptorTag] >> inputDescriptor;
+        int resultInt = (int) svm->predict(inputDescriptor);
+        
+        ///////////////////////////////////////////////////////////////////////////////////////////////
+        ////////////////////////////////////////send result back///////////////////////////////////////
+        
+        std::cout << "sending back a result..."  << std::endl;
+        string res = to_string(resultInt);
+        char const *msg = res.c_str();
+        int len;
+        ssize_t bytes_sent;
+        len = strlen(msg);
+        bytes_sent = send(new_sd, msg, len, 0);
     }
-    
-    //Construct BOWKMeansTrainer
-    //the number of bags
-    int dictionarySize= 1000;
-    //define Term Criteria
-    TermCriteria tc(CV_TERMCRIT_ITER,100, 1e-6);
-    //retries number
-    int retries=1;
-    //necessary flags
-    int flags=KMEANS_PP_CENTERS;
-    //Create the BoW (or BoF) trainer
-    BOWKMeansTrainer bowTrainer(dictionarySize,tc,retries,flags);
-    //cluster the feature vectors
-    Mat dictionary = bowTrainer.cluster(unclusteredDescriptors);
-    
-    //store the vocabulary
-    FileStorage fs("dictionary.yml", FileStorage::WRITE);
-    fs << "vocabulary" << dictionary;
-    fs.release();
-    cout << "Dictionary created";
-    
-#else
-    predictionStep();
-    
-//#if MODE == 1 //Run Thresholding
-//    string window1 = "thresholding";
-//    string window2 = "original";
-//    Mat originCar = imread(DataManager::getInstance().FULL_PATH_PHOTO + "sc3.jpg",0);
-//    namedWindow(window1);
-//    imshow(window1,originCar);
-//    threshold( originCar, originCar, 75, 255,1 );
-//    imshow(window2, originCar);
-//    waitKey(0);
-//#else
-//    imageRegistrator();
-//     string window1 = "thresholding";
-//    Ptr<Feature2D> sift = xfeatures2d::SIFT::create();
-//    string tmp = "car_set/car40.jpg";
-//    Mat descriptor;
-//    Mat img = imread(DataManager::getInstance().FULL_PATH_PHOTO + tmp);
-//    vector<KeyPoint> keypoints;
-//    keypoints = getSiftKeyPoint_tmp(img);
-//    sift->compute(img, keypoints, descriptor);
-//    cout << descriptor << endl;
-//    FileStorage fs("des.yml", FileStorage::WRITE);
-//    fs << "descriptor" << descriptor;
-//    fs.release();
 
-//    showSiftFeature(tmp);
-//#endif
+//    std::cout << "Stopping server..." << std::endl;
+//    freeaddrinfo(host_info_list);
+//    close(new_sd);
+//    close(socketfd);
 
+
+    
+#elif CODE_SEGMENT == 5
+//making input for prediction service
+    if(argc != 4){
+        cout << "usage: ./ dictionary image portNumber" << endl;
+        return 1;
+    }
+    string dictionaryPath = argv[1];
+    string imageFile      = argv[2];
+    string portNum        = argv[3];
+    const char *portNumber = portNum.c_str();
+    
+    Mat dictionary;
+    FileStorage dictFile(dictionaryPath, FileStorage::READ);
+    dictFile["vocabulary"] >> dictionary;
+    dictFile.release();
+
+    Ptr<FeatureDetector> detector = xfeatures2d::SIFT::create();
+    Ptr<DescriptorExtractor> extractor = xfeatures2d::SIFT::create();
+    Ptr<DescriptorMatcher> matcher = FlannBasedMatcher::create("FlannBased");
+    BOWImgDescriptorExtractor bowDE(extractor,matcher);
+    bowDE.setVocabulary(dictionary);
+
+    Mat i = imread(imageFile);
+    vector<KeyPoint> targetKeypoints;
+    detector->detect(i,targetKeypoints);
+    Mat targetBowDescriptor;
+    bowDE.compute2(i,targetKeypoints,targetBowDescriptor);
+    
+    
+    string outName = imageFile.replace(imageFile.length() - 4,imageFile.length() - 1,"");
+    outName += ".yml";
+    FileStorage descriptorFile(outName, FileStorage::WRITE);
+    string descriptorTag = "inputDescriptor";
+    descriptorFile << descriptorTag << targetBowDescriptor;
+    descriptorFile.release();
+    
+    int status;
+    struct addrinfo host_info;       // The struct that getaddrinfo() fills up with data.
+    struct addrinfo *host_info_list; // Pointer to the to the linked list of host_info's.
+    
+    // The MAN page of getaddrinfo() states "All  the other fields in the structure pointed
+    // to by hints must contain either 0 or a null pointer, as appropriate." When a struct
+    // is created in C++, it will be given a block of memory. This memory is not necessary
+    // empty. Therefor we use the memset function to make sure all fields are NULL.
+    memset(&host_info, 0, sizeof host_info);
+    
+    cout << "Setting up the structs..."  << std::endl;
+    
+    host_info.ai_family = AF_UNSPEC;     // IP version not specified. Can be both.
+    host_info.ai_socktype = SOCK_STREAM; // Use SOCK_STREAM for TCP or SOCK_DGRAM for UDP.
+    
+    // Now fill up the linked list of host_info structs with google's address information.
+    status = getaddrinfo("127.0.0.1", portNumber, &host_info, &host_info_list);
+    // getaddrinfo returns 0 on succes, or some other value when an error occured.
+    // (translated into human readable text by the gai_gai_strerror function).
+    if (status != 0)  std::cout << "getaddrinfo error" << gai_strerror(status) ;
+    
+    cout << "Creating a socket..."  << std::endl;
+    int socketfd ; // The socket descripter
+    socketfd = socket(host_info_list->ai_family, host_info_list->ai_socktype,
+                      host_info_list->ai_protocol);
+    if (socketfd == -1)  std::cout << "socket error " ;
+    
+    cout << "Connect()ing..."  << std::endl;
+    status = connect(socketfd, host_info_list->ai_addr, host_info_list->ai_addrlen);
+    if (status == -1)  std::cout << "connect error" ;
+    
+    cout << "sending message..."  << std::endl;
+    const char *msg = outName.c_str();
+    int len;
+    ssize_t bytes_sent;
+    len = strlen(msg);
+    bytes_sent = send(socketfd, msg, len, 0);
+    
+    cout << "Waiting for result..."  << std::endl;
+    ssize_t bytes_recieved;
+    char incoming_data_buffer[1000];
+    bytes_recieved = recv(socketfd, incoming_data_buffer,1000, 0);
+    // If no data arrives, the program will just wait here until some data arrives.
+    if (bytes_recieved == 0) std::cout << "host shut down." << std::endl ;
+    if (bytes_recieved == -1)std::cout << "recieve error!" << std::endl ;
+    std::cout << bytes_recieved << " result recieved :" << std::endl ;
+    std::cout << incoming_data_buffer << std::endl;
+    
+    std::cout << "Receiving complete. Closing socket..." << std::endl;
+    freeaddrinfo(host_info_list);
+    close(socketfd);
 #endif
 }
