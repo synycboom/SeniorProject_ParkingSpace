@@ -23,13 +23,15 @@
 
 #include "DataManager.cpp"
 
+#define numPath 1
+
 using namespace cv;
 using namespace std;
 using namespace ml;
 
 const string PHOTO_PATH(DataManager::FULL_PATH_PHOTO);
 
-void ls(string path, vector<string>* fileList){
+void scanDir(string path, vector<string>* fileList){
     DIR *dp;
     dirent *d;
     
@@ -45,147 +47,175 @@ void ls(string path, vector<string>* fileList){
     }
 }
 
-vector<KeyPoint> getSiftKeyPoint_tmp(Mat img){
-    Ptr<Feature2D> sift = xfeatures2d::SIFT::create();
-    std::vector<KeyPoint> keypoints;
-    sift->detect( img, keypoints);
-    return keypoints;
+bool replace(std::string& str, const std::string& from, const std::string& to) {
+    size_t start_pos = str.find(from);
+    if(start_pos == std::string::npos)
+        return false;
+    str.replace(start_pos, from.length(), to);
+    return true;
 }
 
-vector<KeyPoint> getSiftKeyPoint(string pname){
-    Mat img;
-    string imgPath = PHOTO_PATH + pname;
-    img = imread(imgPath);
-    Ptr<Feature2D> sift = xfeatures2d::SIFT::create();
-    std::vector<KeyPoint> keypoints;
-    sift->detect( img, keypoints);
-    
-    return keypoints;
-}
-
-void predictionStep(){
-    //prepare BOW descriptor extractor from the dictionary
+#if numPath == 2
+void featureExtract(string dictionaryFile, string positivePath, string negativePath, string outputPath){
     Mat dictionary;
-    FileStorage fs("dictionary.yml", FileStorage::READ);
+    FileStorage fs(dictionaryFile, FileStorage::READ);
     fs["vocabulary"] >> dictionary;
     fs.release();
+    
+    ofstream desFile;
+    desFile.open (outputPath);
+    
     
     Ptr<FeatureDetector> detector = xfeatures2d::SIFT::create();
     Ptr<DescriptorExtractor> extractor = xfeatures2d::SIFT::create();
     Ptr<DescriptorMatcher> matcher = FlannBasedMatcher::create("FlannBased");
-    //create BoF (or BoW) descriptor extractor
     BOWImgDescriptorExtractor bowDE(extractor,matcher);
-    //Set the dictionary with the vocabulary we created in the first step
+    
+    const char* extension[] = {".png", ".jpg"};
+    
     bowDE.setVocabulary(dictionary);
     
-    //open the file to write the resultant descriptor
-    FileStorage allDes("all-descriptor.yml", FileStorage::WRITE);
-    
-    string extension = ".jpg";
     Mat trainingSet;
     Mat labelsMat;
+    Mat descriptor;
+    vector<KeyPoint> keypoints;
     
-    //positive training set
+    vector<string> posFileList, negFileList;;
+    scanDir(positivePath,&posFileList);
+    scanDir(negativePath,&negFileList);
     
-    string carName = PHOTO_PATH + "/car_set/car";
-//    for (int index = TRAIN_MIN; index <= TRAIN_MAX; index++) {
-//        if(index >= TEST_MIN && index <= TEST_MAX)
-//            continue;
-//        string picName = carName + to_string(index) + extension;
-//        Mat input = imread(picName, CV_LOAD_IMAGE_GRAYSCALE);
-//        cout << "Positive Train "<<picName << endl;
-//        //To store the keypoints that will be extracted by SIFT
-//        vector<KeyPoint> keypoints;
-//        //Detect SIFT keypoints (or feature points)
-//        detector->detect(input,keypoints);
-//        //To store the BoW (or BoF) representation of the image
-//        Mat bowDescriptor;
-//        //extract BoW (or BoF) descriptor from given image
-//        bowDE.compute2(input,keypoints,bowDescriptor);
-//        trainingSet.push_back(bowDescriptor);
-//        labelsMat.push_back(1);
-//        
-//        if(index == TRAIN_MIN){
-//            cout << bowDescriptor << endl;
-//        }
-//    }
     
-    //negative training set
+    for (auto &str : posFileList){
+        const char* fileName = str.c_str();
+        if(strcspn(fileName, extension[0]) > 0 || strcspn(fileName, extension[1])){
+            string filePath = positivePath + "/" + fileName;
+            //replace backslash if duplicated
+            replace(filePath, "//", "/");
+            
+            descriptor.release();
+            keypoints.clear();
+            
+            Mat input = imread(filePath, CV_LOAD_IMAGE_GRAYSCALE);
+            detector->detect(input,keypoints);
+            bowDE.compute2(input,keypoints,descriptor);
+            
+            desFile << "+1";
+            for(int i = 0; i < descriptor.cols ; i++){
+                desFile << " " << i + 1 << ":" << descriptor.at<float>(0, i);
+            }
+            desFile << endl;
+        }
+    }
     
-    string floorName = PHOTO_PATH + "/not_car_set/notcar";
-    Mat tranningNegative;
-//    for (int index = TRAIN_MIN; index <= TRAIN_MAX; index++) {
-//        if(index >= TEST_MIN && index <= TEST_MAX)
-//            continue;
-//        string picName = floorName + to_string(index) + extension;
-//        Mat input = imread(picName, CV_LOAD_IMAGE_GRAYSCALE);
-//        cout << "Negative Train "<<picName << endl;
-//        //To store the keypoints that will be extracted by SIFT
-//        vector<KeyPoint> keypoints;
-//        //Detect SIFT keypoints (or feature points)
-//        detector->detect(input,keypoints);
-//        //To store the BoW (or BoF) representation of the image
-//        Mat bowDescriptor;
-//        //extract BoW (or BoF) descriptor from given image
-//        bowDE.compute2(input,keypoints,bowDescriptor);
-//        trainingSet.push_back(bowDescriptor);
-//        labelsMat.push_back(-1);
-//    }
+    for (auto &str : negFileList){
+        const char* fileName = str.c_str();
+        if(strcspn(fileName, extension[0]) > 0 || strcspn(fileName, extension[1])){
+            string filePath = negativePath + "/" + fileName;
+            //replace backslash if duplicated
+            replace(filePath, "//", "/");
+            
+            descriptor.release();
+            keypoints.clear();
+            
+            Mat input = imread(filePath, CV_LOAD_IMAGE_GRAYSCALE);
+            detector->detect(input,keypoints);
+            bowDE.compute2(input,keypoints,descriptor);
+            
+            desFile << "-1";
+            for(int i = 0; i < descriptor.cols ; i++){
+                desFile << " " << i + 1 << ":" << descriptor.at<float>(0, i);
+            }
+            desFile << endl;
+        }
+    }
 
-
-    //To store the image tag name - only for save the descriptor in a file
-    char * imageTag = new char[10];
-    
-    //prepare the yml (some what similar to xml) file
-//    sprintf(imageTag,"all-descriptor");
-//    allDes << imageTag << trainingSet;
-//    //release the file storage
-//    allDes.release();
-
-    
-    ///////// prediction /////////
-//    ofstream myfile;
-//    myfile.open (RESULT);
-//    
-//    int falseNegative = 0, falsePositive = 0;
-//    for (int index = TEST_MIN; index <= TEST_MAX; index++) {
-//        string targetPhoto = PHOTO_PATH + "/car_set/car"
-//                            + to_string(index)+ extension;
-//        
-//        cout << "Positive Test "<< targetPhoto << endl;
-//        Mat img=imread(targetPhoto, CV_LOAD_IMAGE_GRAYSCALE);
-//        vector<KeyPoint> targetKeypoints;
-//        detector->detect(img,targetKeypoints);
-//        Mat targetBowDescriptor;
-//        bowDE.compute2(img,targetKeypoints,targetBowDescriptor);
-//        float response = svm->predict(targetBowDescriptor);
-//        if(response == -1) falseNegative++;
-//        myfile << "car" << to_string(index) << " = " << to_string(response) << endl;
-//    }
-//    for (int index = TEST_MIN ; index <= TEST_MAX; index++) {
-//        string targetPhoto = PHOTO_PATH + "/not_car_set/notcar"
-//                            + to_string(index) + extension;
-//        
-//        cout << "Negative Test "<< targetPhoto << endl;
-//        Mat img=imread(targetPhoto, CV_LOAD_IMAGE_GRAYSCALE);
-//        vector<KeyPoint> targetKeypoints;
-//        detector->detect(img,targetKeypoints);
-//        Mat targetBowDescriptor;
-//        bowDE.compute2(img,targetKeypoints,targetBowDescriptor);
-//        float response = svm->predict(targetBowDescriptor);
-//        if(response == 1) falsePositive++;
-//        myfile << "notcar" << to_string(index) << " = " << to_string(response) << endl;
-//    }
-//    myfile << endl << endl;
-//    myfile << "false positive = " << to_string(falsePositive) << endl;
-//    myfile << "false negative = " << to_string(falseNegative) << endl;
-//    myfile.close();
-    
-
+    desFile.close();
     
 }
 
+#elif numPath == 1
+
+void featureExtract(string dictionaryFile, string positivePath, string outputPath, string labelNum){
+    Mat dictionary;
+    FileStorage fs(dictionaryFile, FileStorage::READ);
+    fs["vocabulary"] >> dictionary;
+    fs.release();
+    
+    ofstream desFile;
+    desFile.open (outputPath);
+    
+    
+    Ptr<FeatureDetector> detector = xfeatures2d::SIFT::create();
+    Ptr<DescriptorExtractor> extractor = xfeatures2d::SIFT::create();
+    Ptr<DescriptorMatcher> matcher = FlannBasedMatcher::create("FlannBased");
+    BOWImgDescriptorExtractor bowDE(extractor,matcher);
+    
+    const char* extension[] = {".png", ".jpg"};
+    
+    bowDE.setVocabulary(dictionary);
+    
+    Mat trainingSet;
+    Mat labelsMat;
+    Mat descriptor;
+    vector<KeyPoint> keypoints;
+    
+    vector<string> fileList;
+    scanDir(positivePath,&fileList);
+    
+    
+    for (auto &str : fileList){
+        const char* fileName = str.c_str();
+        if(strcspn(fileName, extension[0]) > 0 || strcspn(fileName, extension[1])){
+            string filePath = positivePath + "/" + fileName;
+            //replace backslash if duplicated
+            replace(filePath, "//", "/");
+            
+            descriptor.release();
+            keypoints.clear();
+            
+            Mat input = imread(filePath, CV_LOAD_IMAGE_GRAYSCALE);
+            detector->detect(input,keypoints);
+            bowDE.compute2(input,keypoints,descriptor);
+            
+            //set unknown label
+            desFile << labelNum;
+            for(int i = 0; i < descriptor.cols ; i++){
+                desFile << " " << i + 1 << ":" << descriptor.at<float>(0, i);
+            }
+            desFile << endl;
+        }
+    }
+
+    desFile.close();
+    
+}
+
+#endif
+
 int main(int argc, const char * argv[]) {
     
+#if numPath == 2
+    if(argc != 5){
+        cout << "usage: (params) Dictionary_File Pos_Folder Neg_Folder output" << endl;
+        return 1;
+    }
+    string dictionaryFile = argv[1];
+    string positivePath = argv[2];
+    string negativePath = argv[3];
+    string outputPath = argv[4];
+    
+    featureExtract(dictionaryFile, positivePath, negativePath,outputPath);
 
+#elif numPath == 1
+    if(argc != 5){
+        cout << "usage: (params) Dictionary_File Images_Folder Label_Number output" << endl;
+        return 1;
+    }
+    string dictionaryFile = argv[1];
+    string imagesPath = argv[2];
+    string labelNum = argv[3];
+    string outputPath = argv[4];
+    
+    featureExtract(dictionaryFile, imagesPath,outputPath,labelNum);
+#endif
 }
