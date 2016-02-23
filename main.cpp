@@ -22,8 +22,7 @@
 #include<dirent.h>
 
 #include "DataManager.cpp"
-
-#define numPath 1
+#include "CSVRow.cpp"
 
 using namespace cv;
 using namespace std;
@@ -55,167 +54,28 @@ bool replace(std::string& str, const std::string& from, const std::string& to) {
     return true;
 }
 
-#if numPath == 2
-void featureExtract(string dictionaryFile, string positivePath, string negativePath, string outputPath){
-    Mat dictionary;
-    FileStorage fs(dictionaryFile, FileStorage::READ);
-    fs["vocabulary"] >> dictionary;
-    fs.release();
+void fragmentImage(string inputFile, string outputPath){
+    Mat img = imread(inputFile);
     
-    ofstream desFile;
-    desFile.open (outputPath);
-    
-    
-    Ptr<FeatureDetector> detector = xfeatures2d::SIFT::create();
-    Ptr<DescriptorExtractor> extractor = xfeatures2d::SIFT::create();
-    Ptr<DescriptorMatcher> matcher = FlannBasedMatcher::create("FlannBased");
-    BOWImgDescriptorExtractor bowDE(extractor,matcher);
-    
-    const char* extension[] = {".png", ".jpg"};
-    
-    bowDE.setVocabulary(dictionary);
-    
-    Mat trainingSet;
-    Mat labelsMat;
-    Mat descriptor;
-    vector<KeyPoint> keypoints;
-    
-    vector<string> posFileList, negFileList;;
-    scanDir(positivePath,&posFileList);
-    scanDir(negativePath,&negFileList);
-    
-    
-    for (auto &str : posFileList){
-        const char* fileName = str.c_str();
-        if(strcspn(fileName, extension[0]) > 0 || strcspn(fileName, extension[1])){
-            string filePath = positivePath + "/" + fileName;
-            //replace backslash if duplicated
-            replace(filePath, "//", "/");
-            
-            descriptor.release();
-            keypoints.clear();
-            
-            Mat input = imread(filePath, CV_LOAD_IMAGE_GRAYSCALE);
-            detector->detect(input,keypoints);
-            bowDE.compute2(input,keypoints,descriptor);
-            
-            desFile << "+1";
-            for(int i = 0; i < descriptor.cols ; i++){
-                desFile << " " << i + 1 << ":" << descriptor.at<float>(0, i);
-            }
-            desFile << endl;
-        }
-    }
-    
-    for (auto &str : negFileList){
-        const char* fileName = str.c_str();
-        if(strcspn(fileName, extension[0]) > 0 || strcspn(fileName, extension[1])){
-            string filePath = negativePath + "/" + fileName;
-            //replace backslash if duplicated
-            replace(filePath, "//", "/");
-            
-            descriptor.release();
-            keypoints.clear();
-            
-            Mat input = imread(filePath, CV_LOAD_IMAGE_GRAYSCALE);
-            detector->detect(input,keypoints);
-            bowDE.compute2(input,keypoints,descriptor);
-            
-            desFile << "-1";
-            for(int i = 0; i < descriptor.cols ; i++){
-                desFile << " " << i + 1 << ":" << descriptor.at<float>(0, i);
-            }
-            desFile << endl;
-        }
-    }
-
-    desFile.close();
-    
+    //Rect(x, y, width, height)
+    Rect slotUp1(105, 20, 186, 321);
 }
-
-#elif numPath == 1
-
-void featureExtract(string dictionaryFile, string positivePath, string outputPath, string labelNum){
-    Mat dictionary;
-    FileStorage fs(dictionaryFile, FileStorage::READ);
-    fs["vocabulary"] >> dictionary;
-    fs.release();
-    
-    ofstream desFile;
-    desFile.open (outputPath);
-    
-    
-    Ptr<FeatureDetector> detector = xfeatures2d::SIFT::create();
-    Ptr<DescriptorExtractor> extractor = xfeatures2d::SIFT::create();
-    Ptr<DescriptorMatcher> matcher = FlannBasedMatcher::create("FlannBased");
-    BOWImgDescriptorExtractor bowDE(extractor,matcher);
-    
-    const char* extension[] = {".png", ".jpg"};
-    
-    bowDE.setVocabulary(dictionary);
-    
-    Mat trainingSet;
-    Mat labelsMat;
-    Mat descriptor;
-    vector<KeyPoint> keypoints;
-    
-    vector<string> fileList;
-    scanDir(positivePath,&fileList);
-    
-    
-    for (auto &str : fileList){
-        const char* fileName = str.c_str();
-        if(strcspn(fileName, extension[0]) > 0 || strcspn(fileName, extension[1])){
-            string filePath = positivePath + "/" + fileName;
-            //replace backslash if duplicated
-            replace(filePath, "//", "/");
-            
-            descriptor.release();
-            keypoints.clear();
-            
-            Mat input = imread(filePath, CV_LOAD_IMAGE_GRAYSCALE);
-            detector->detect(input,keypoints);
-            bowDE.compute2(input,keypoints,descriptor);
-            
-            //set unknown label
-            desFile << labelNum;
-            for(int i = 0; i < descriptor.cols ; i++){
-                desFile << " " << i + 1 << ":" << descriptor.at<float>(0, i);
-            }
-            desFile << endl;
-        }
-    }
-
-    desFile.close();
-    
-}
-
-#endif
 
 int main(int argc, const char * argv[]) {
     
-#if numPath == 2
-    if(argc != 5){
-        cout << "usage: (params) Dictionary_File Pos_Folder Neg_Folder output" << endl;
+    if(argc != 4){
+        cout << "usage: (params) SlotPos_CSV IN_File Out_Path/" << endl;
         return 1;
     }
-    string dictionaryFile = argv[1];
-    string positivePath = argv[2];
-    string negativePath = argv[3];
-    string outputPath = argv[4];
-    
-    featureExtract(dictionaryFile, positivePath, negativePath,outputPath);
+    string slotPosCsv = argv[1];
+    string inputFile = argv[2];
+    string outputPath = argv[3];
 
-#elif numPath == 1
-    if(argc != 5){
-        cout << "usage: (params) Dictionary_File Images_Folder Label_Number output" << endl;
-        return 1;
-    }
-    string dictionaryFile = argv[1];
-    string imagesPath = argv[2];
-    string labelNum = argv[3];
-    string outputPath = argv[4];
+    std::ifstream file("plop.csv");
     
-    featureExtract(dictionaryFile, imagesPath,outputPath,labelNum);
-#endif
+    CSVRow row;
+    while(file >> row)
+    {
+        std::cout << "4th Element(" << row[3] << ")\n";
+    }
 }
