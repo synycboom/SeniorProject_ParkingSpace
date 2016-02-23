@@ -55,167 +55,109 @@ bool replace(std::string& str, const std::string& from, const std::string& to) {
     return true;
 }
 
-#if numPath == 2
-void featureExtract(string dictionaryFile, string positivePath, string negativePath, string outputPath){
-    Mat dictionary;
-    FileStorage fs(dictionaryFile, FileStorage::READ);
-    fs["vocabulary"] >> dictionary;
-    fs.release();
+void cropImage(string inputFile, string outputFile){
     
-    ofstream desFile;
-    desFile.open (outputPath);
+    Mat img = imread(inputFile);
+    Mat origin;
+    Mat output;
     
+    //    cvtColor(img, img, CV_BGR2HSV);
+    Mat yellowMat, greenMat, pinkMat, orangeMat;
     
-    Ptr<FeatureDetector> detector = xfeatures2d::SIFT::create();
-    Ptr<DescriptorExtractor> extractor = xfeatures2d::SIFT::create();
-    Ptr<DescriptorMatcher> matcher = FlannBasedMatcher::create("FlannBased");
-    BOWImgDescriptorExtractor bowDE(extractor,matcher);
+    inRange(img, Scalar(110,180,150), Scalar(140,255,255), greenMat);
+    inRange(img, Scalar(90,150,215), Scalar(100,255,255), orangeMat);
+    inRange(img, Scalar(240,170,170), Scalar(250,200,255), pinkMat);
+    inRange(img, Scalar(50,170,170), Scalar(70,255,255), yellowMat);
     
-    const char* extension[] = {".png", ".jpg"};
+    medianBlur(yellowMat, yellowMat, 3);
+    medianBlur(orangeMat, orangeMat, 3);
+    medianBlur(pinkMat, pinkMat, 3);
+    medianBlur(greenMat, greenMat, 3);
+    output = greenMat + orangeMat + pinkMat + yellowMat;
     
-    bowDE.setVocabulary(dictionary);
-    
-    Mat trainingSet;
-    Mat labelsMat;
-    Mat descriptor;
-    vector<KeyPoint> keypoints;
-    
-    vector<string> posFileList, negFileList;;
-    scanDir(positivePath,&posFileList);
-    scanDir(negativePath,&negFileList);
+    Mat canny_yellow,canny_pink,canny_green,canny_orange;
+    vector<vector<Point> > contour_yellow,contour_pink,contour_green,contour_orange;
+    vector<Vec4i> hierarchy;
     
     
-    for (auto &str : posFileList){
-        const char* fileName = str.c_str();
-        if(strcspn(fileName, extension[0]) > 0 || strcspn(fileName, extension[1])){
-            string filePath = positivePath + "/" + fileName;
-            //replace backslash if duplicated
-            replace(filePath, "//", "/");
-            
-            descriptor.release();
-            keypoints.clear();
-            
-            Mat input = imread(filePath, CV_LOAD_IMAGE_GRAYSCALE);
-            detector->detect(input,keypoints);
-            bowDE.compute2(input,keypoints,descriptor);
-            
-            desFile << "+1";
-            for(int i = 0; i < descriptor.cols ; i++){
-                desFile << " " << i + 1 << ":" << descriptor.at<float>(0, i);
-            }
-            desFile << endl;
-        }
-    }
+    Canny( yellowMat, canny_yellow, 100, 200, 3 );
+    Canny( orangeMat, canny_orange, 100, 200, 3 );
+    Canny( pinkMat, canny_pink, 100, 200, 3 );
+    Canny( greenMat, canny_green, 100, 200, 3 );
     
-    for (auto &str : negFileList){
-        const char* fileName = str.c_str();
-        if(strcspn(fileName, extension[0]) > 0 || strcspn(fileName, extension[1])){
-            string filePath = negativePath + "/" + fileName;
-            //replace backslash if duplicated
-            replace(filePath, "//", "/");
-            
-            descriptor.release();
-            keypoints.clear();
-            
-            Mat input = imread(filePath, CV_LOAD_IMAGE_GRAYSCALE);
-            detector->detect(input,keypoints);
-            bowDE.compute2(input,keypoints,descriptor);
-            
-            desFile << "-1";
-            for(int i = 0; i < descriptor.cols ; i++){
-                desFile << " " << i + 1 << ":" << descriptor.at<float>(0, i);
-            }
-            desFile << endl;
-        }
-    }
-
-    desFile.close();
+    findContours( canny_yellow, contour_yellow, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+    findContours( canny_pink, contour_pink, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+    findContours( canny_green, contour_green, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+    findContours( canny_orange, contour_orange, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
     
-}
-
-#elif numPath == 1
-
-void featureExtract(string dictionaryFile, string positivePath, string outputPath, string labelNum){
-    Mat dictionary;
-    FileStorage fs(dictionaryFile, FileStorage::READ);
-    fs["vocabulary"] >> dictionary;
-    fs.release();
+    cv::Point centoid_yellow,centoid_red,centoid_green,centoid_blue;
     
-    ofstream desFile;
-    desFile.open (outputPath);
+    cv::Moments momYellow= cv::moments(cv::Mat(contour_yellow[0]));
+    cv::Moments momRed= cv::moments(cv::Mat(contour_pink[0]));
+    cv::Moments momGreen= cv::moments(cv::Mat(contour_green[0]));
+    cv::Moments momBlue= cv::moments(cv::Mat(contour_orange[0]));
     
+    centoid_yellow =  Point(momYellow.m10/momYellow.m00,momYellow.m01/momYellow.m00);
+    centoid_red = Point(momRed.m10/momRed.m00,momRed.m01/momRed.m00);
+    centoid_green = Point(momGreen.m10/momGreen.m00,momGreen.m01/momGreen.m00);
+    centoid_blue = Point(momBlue.m10/momBlue.m00,momBlue.m01/momBlue.m00);
     
-    Ptr<FeatureDetector> detector = xfeatures2d::SIFT::create();
-    Ptr<DescriptorExtractor> extractor = xfeatures2d::SIFT::create();
-    Ptr<DescriptorMatcher> matcher = FlannBasedMatcher::create("FlannBased");
-    BOWImgDescriptorExtractor bowDE(extractor,matcher);
+    // compute the width of the new image, which will be the
+    // maximum distance between bottom-right and bottom-left
+    // x-coordiates or the top-right and top-left x-coordinates
+    double widthA = sqrt(
+                         pow(centoid_red.x - centoid_yellow.x, 2) +
+                         pow(centoid_red.y - centoid_yellow.y, 2)
+                         );
+    double widthB = sqrt(
+                         pow(centoid_green.x - centoid_blue.x, 2) +
+                         pow(centoid_green.y - centoid_blue.y, 2)
+                         );
+    double maxWidth = max(int(widthA), int(widthB));
     
-    const char* extension[] = {".png", ".jpg"};
+    // compute the height of the new image, which will be the
+    // maximum distance between the top-right and bottom-right
+    // y-coordinates or the top-left and bottom-left y-coordinates
+    double heightA = sqrt(
+                          pow((centoid_green.x - centoid_red.x),2) +
+                          pow((centoid_green.y - centoid_red.y),2)
+                          );
+    double heightB = sqrt(
+                          pow((centoid_blue.x - centoid_yellow.x),2) +
+                          pow((centoid_blue.y - centoid_yellow.y),2)
+                          );
+    double maxHeight = max(int(heightA), int(heightB));
     
-    bowDE.setVocabulary(dictionary);
+    cv::Point2f source_points[4];
+    cv::Point2f dest_points[4];
     
-    Mat trainingSet;
-    Mat labelsMat;
-    Mat descriptor;
-    vector<KeyPoint> keypoints;
+    source_points[0] = centoid_blue;
+    source_points[1] = centoid_red;
+    source_points[2] = centoid_green;
+    source_points[3] = centoid_yellow;
     
-    vector<string> fileList;
-    scanDir(positivePath,&fileList);
+    dest_points[0] = Point(0,0);
+    dest_points[1] = Point(maxWidth - 1,0);
+    dest_points[2] = Point(maxWidth - 1, maxHeight - 1);
+    dest_points[3] = Point(0, maxHeight);
     
-    
-    for (auto &str : fileList){
-        const char* fileName = str.c_str();
-        if(strcspn(fileName, extension[0]) > 0 || strcspn(fileName, extension[1])){
-            string filePath = positivePath + "/" + fileName;
-            //replace backslash if duplicated
-            replace(filePath, "//", "/");
-            
-            descriptor.release();
-            keypoints.clear();
-            
-            Mat input = imread(filePath, CV_LOAD_IMAGE_GRAYSCALE);
-            detector->detect(input,keypoints);
-            bowDE.compute2(input,keypoints,descriptor);
-            
-            //set unknown label
-            desFile << labelNum;
-            for(int i = 0; i < descriptor.cols ; i++){
-                desFile << " " << i + 1 << ":" << descriptor.at<float>(0, i);
-            }
-            desFile << endl;
-        }
-    }
-
-    desFile.close();
+    Mat m = getPerspectiveTransform(source_points, dest_points);
+    warpPerspective(img, output, m, Size(maxWidth, maxHeight) );
+    imwrite(outputFile, output);
     
 }
 
-#endif
+
 
 int main(int argc, const char * argv[]) {
-    
-#if numPath == 2
-    if(argc != 5){
-        cout << "usage: (params) Dictionary_File Pos_Folder Neg_Folder output" << endl;
-        return 1;
-    }
-    string dictionaryFile = argv[1];
-    string positivePath = argv[2];
-    string negativePath = argv[3];
-    string outputPath = argv[4];
-    
-    featureExtract(dictionaryFile, positivePath, negativePath,outputPath);
 
-#elif numPath == 1
-    if(argc != 5){
-        cout << "usage: (params) Dictionary_File Images_Folder Label_Number output" << endl;
+    if(argc != 3){
+        cout << "usage: (params) Input_File Output_Path/FileName" << endl;
         return 1;
     }
-    string dictionaryFile = argv[1];
-    string imagesPath = argv[2];
-    string labelNum = argv[3];
-    string outputPath = argv[4];
+    string inputFile = argv[1];
+    string outputPath = argv[2];
     
-    featureExtract(dictionaryFile, imagesPath,outputPath,labelNum);
-#endif
+    cropImage(inputFile, outputPath);
+    
 }
