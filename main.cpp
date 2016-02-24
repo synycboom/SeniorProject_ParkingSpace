@@ -5,9 +5,13 @@
 //  Created by synycboom on 9/11/2558 BE.
 //  Copyright © 2558 HOME. All rights reserved.
 //
+
+
+//TODO to use sorting you have to compile natsort and use it together !!!!!
 #include <iostream>
 #include <fstream>
 #include <array>
+#include <algorithm>
 #include <opencv2/opencv.hpp>
 #include <opencv2/ml/ml.hpp>
 #include "opencv2/features2d/features2d.hpp"
@@ -18,12 +22,11 @@
 #include "opencv2/calib3d/calib3d.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 
-#include<sys/types.h>
-#include<dirent.h>
+#include <dirent.h>
 
 #include "DataManager.cpp"
-
 #define numPath 1
+#define isSort true
 
 using namespace cv;
 using namespace std;
@@ -144,7 +147,6 @@ void featureExtract(string dictionaryFile, string positivePath, string outputPat
     ofstream desFile;
     desFile.open (outputPath);
     
-    
     Ptr<FeatureDetector> detector = xfeatures2d::SIFT::create();
     Ptr<DescriptorExtractor> extractor = xfeatures2d::SIFT::create();
     Ptr<DescriptorMatcher> matcher = FlannBasedMatcher::create("FlannBased");
@@ -162,6 +164,35 @@ void featureExtract(string dictionaryFile, string positivePath, string outputPat
     vector<string> fileList;
     scanDir(positivePath,&fileList);
     
+#if isSort == true
+    ofstream dirFile;
+    dirFile.open ("dirFile");
+    for (auto &str : fileList){
+        const char* fileName = str.c_str();
+        if(strcspn(fileName, extension[0]) > 0 || strcspn(fileName, extension[1])){
+            dirFile << fileName << endl;
+        }
+    }
+    
+    dirFile.close();
+    system("./natsort < dirFile > tmp");
+    
+    string line;
+    ifstream tmpFile ("tmp");
+    fileList.clear();
+    if (tmpFile.is_open())
+    {
+        while ( getline (tmpFile,line) )
+        {
+            fileList.push_back(line);
+        }
+        tmpFile.close();
+    }
+    
+    remove("dirFile");
+    remove("tmp");
+#endif
+    
     
     for (auto &str : fileList){
         const char* fileName = str.c_str();
@@ -169,7 +200,7 @@ void featureExtract(string dictionaryFile, string positivePath, string outputPat
             string filePath = positivePath + "/" + fileName;
             //replace backslash if duplicated
             replace(filePath, "//", "/");
-            
+            cout << filePath << endl;
             descriptor.release();
             keypoints.clear();
             
@@ -219,7 +250,7 @@ int main(int argc, const char * argv[]) {
     string imagesPath = argv[2];
     string labelNum = argv[3];
     string outputPath = argv[4];
-    
+
     featureExtract(dictionaryFile, imagesPath,outputPath,labelNum);
 #endif
 }
