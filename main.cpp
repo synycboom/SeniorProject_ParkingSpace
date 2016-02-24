@@ -5,8 +5,11 @@
 //  Created by synycboom on 9/11/2558 BE.
 //  Copyright © 2558 HOME. All rights reserved.
 //
+
+#include <iterator>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <array>
 #include <opencv2/opencv.hpp>
 #include <opencv2/ml/ml.hpp>
@@ -22,8 +25,7 @@
 #include<dirent.h>
 
 #include "DataManager.cpp"
-#include "CSVRow.cpp"
-
+#define SCALEUP 1
 using namespace cv;
 using namespace std;
 using namespace ml;
@@ -54,11 +56,39 @@ bool replace(std::string& str, const std::string& from, const std::string& to) {
     return true;
 }
 
-void fragmentImage(string inputFile, string outputPath){
+vector<string> getNextLineAndSplitIntoTokens(istream& str)
+{
+    vector<string> result;
+    string line;
+    getline(str,line);
+    
+    stringstream lineStream(line);
+    string cell;
+    
+    while(getline(lineStream,cell,','))
+    {
+        result.push_back(cell);
+    }
+    return result;
+}
+
+void fragmentImage(vector<vector<string>> csv,string inputFile, string outputPath){
     Mat img = imread(inputFile);
     
     //Rect(x, y, width, height)
-    Rect slotUp1(105, 20, 186, 321);
+    for(int i = 0; i < csv.size(); i++){
+        vector<string> eleArr = csv[i];
+        
+        Rect slotRect(stoi(eleArr[1]), stoi(eleArr[2]), stoi(eleArr[3]), stoi(eleArr[4]));
+        Mat SlotImg = img(slotRect);
+        resize(SlotImg, SlotImg, Size(SlotImg.cols * SCALEUP, SlotImg.rows * SCALEUP));
+        string _outputPath = outputPath + eleArr[0] + ".jpg";
+        replace(_outputPath, "//", "/");
+        imwrite(_outputPath ,SlotImg);
+    }
+    
+    
+
 }
 
 int main(int argc, const char * argv[]) {
@@ -71,11 +101,15 @@ int main(int argc, const char * argv[]) {
     string inputFile = argv[2];
     string outputPath = argv[3];
 
-    std::ifstream file("plop.csv");
+    std::ifstream file(slotPosCsv);
     
-    CSVRow row;
-    while(file >> row)
-    {
-        std::cout << "4th Element(" << row[3] << ")\n";
+    vector<vector<string>> csv;
+    vector<string> line = getNextLineAndSplitIntoTokens(file);
+    while(line.size() != 0){
+        csv.push_back(line);
+        line = getNextLineAndSplitIntoTokens(file);
     }
+
+    fragmentImage(csv, inputFile, outputPath);
+
 }
