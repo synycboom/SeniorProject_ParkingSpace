@@ -29,7 +29,7 @@ using namespace cv;
 using namespace std;
 using namespace ml;
 
-const string PHOTO_PATH(DataManager::FULL_PATH_PHOTO);
+
 
 void scanDir(string path, vector<string>* fileList){
     DIR *dp;
@@ -174,9 +174,13 @@ void featureExtract(string dictionaryFile, string positivePath, string outputPat
             keypoints.clear();
             
             Mat input = imread(filePath, CV_LOAD_IMAGE_GRAYSCALE);
+
             detector->detect(input,keypoints);
             bowDE.compute2(input,keypoints,descriptor);
-            
+            if(descriptor.cols == 0){
+                Mat zeroDes(1, 1000, CV_8UC1, Scalar(0));
+                descriptor = zeroDes;
+            }
             //set unknown label
             desFile << labelNum;
             for(int i = 0; i < descriptor.cols ; i++){
@@ -196,7 +200,7 @@ int main(int argc, const char * argv[]) {
     
 #if numPath == 2
     if(argc != 5){
-        cout << "usage: (params) Dictionary_File Pos_Folder Neg_Folder output" << endl;
+        cout << "usage: (params) Dictionary_File Pos_Folder Neg_Folder outputFile" << endl;
         return 1;
     }
     string dictionaryFile = argv[1];
@@ -208,7 +212,7 @@ int main(int argc, const char * argv[]) {
 
 #elif numPath == 1
     if(argc != 5){
-        cout << "usage: (params) Dictionary_File Images_Folder Label_Number output" << endl;
+        cout << "usage: (params) Dictionary_File Images_Folder Label_Number outputFile" << endl;
         return 1;
     }
     string dictionaryFile = argv[1];
