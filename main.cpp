@@ -30,8 +30,6 @@ using namespace cv;
 using namespace std;
 using namespace ml;
 
-const string PHOTO_PATH(DataManager::FULL_PATH_PHOTO);
-
 void scanDir(string path, vector<string>* fileList){
     DIR *dp;
     dirent *d;
