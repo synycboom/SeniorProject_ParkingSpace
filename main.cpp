@@ -77,7 +77,12 @@ void fragmentImage(vector<vector<string>> csv,string inputFile, string outputPat
     for(int i = 0; i < csv.size(); i++){
         vector<string> eleArr = csv[i];
         
-        Rect slotRect(stoi(eleArr[1]), stoi(eleArr[2]), stoi(eleArr[3]), stoi(eleArr[4]));
+        int x = round( stof(eleArr[1]) * img.cols / 100 );
+        int y = round( stof(eleArr[2]) * img.rows / 100 );
+        int width = round( stof(eleArr[3]) * img.cols / 100 );
+        int height = round( stof(eleArr[4]) * img.rows / 100 );
+        
+        Rect slotRect(x, y, width, height);
         Mat SlotImg = img(slotRect);
         resize(SlotImg, SlotImg, Size(SlotImg.cols * SCALEUP, SlotImg.rows * SCALEUP));
         string _outputPath = outputPath + eleArr[0] + ".jpg";
