@@ -12,8 +12,8 @@ using namespace std;
 class DataManager{
 public:
     
-    const string FULL_PATH_PHOTO = "/Users/synycboom/Dropbox/Senior Project/Photo/";
-    const string FULL_PATH_VIDEO = "/Users/synycboom/Dropbox/Senior Project/Video/";
+    const string FULL_PATH_PHOTO = "/Users/synycboom/Dropbox/SeniorProject/Photo/";
+    const string FULL_PATH_VIDEO = "/Users/synycboom/Dropbox/SeniorProject/Video/";
     
     const array<string, 7> carArr {"car1.jpg","car2.jpg","car3.jpg","car4.jpg","car5.jpg","car6.jpg","car7.jpg"};
     const array<string, 7> floorArr {"base_floor1.jpg","base_floor2.jpg","base_floor3.jpg","base_floor4.jpg","base_floor5.jpg","base_floor6.jpg","base_floor7.jpg"};
