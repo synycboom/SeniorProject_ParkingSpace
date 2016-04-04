@@ -24,7 +24,8 @@ using namespace cv;
 using namespace std;
 using namespace ml;
 
-void surf(Mat img1, Mat img2){
+void getMarkerPos(Mat img1, Mat img2, vector<Point> &marker){
+    
     vector<KeyPoint> keypoints1;
     vector<KeyPoint> keypoints2;
     Mat des1, des2;
@@ -39,21 +40,13 @@ void surf(Mat img1, Mat img2){
     detector->detectAndCompute(img1, Mat(), keypoints1, des1);
     detector->detectAndCompute(img2, Mat(), keypoints2, des2);
     
-//    drawKeypoints(img1, keypoints1, img1);
-//    drawKeypoints(img2, keypoints2, img2);
-//    
-//    imshow("img1", img1);
-//    imshow("img2", img2);
-//    waitKey(0);
-    
     FlannBasedMatcher matcher;
     std::vector< DMatch > matches;
     matcher.match( des1, des2, matches );
     
     double max_dist = 0; double min_dist = 100;
     
-    for( int i = 0; i < des1.rows; i++ )
-    {
+    for( size_t i = 0; i < des1.rows; i++ ){
         double dist = matches[i].distance;
         if( dist < min_dist ) min_dist = dist;
         if( dist > max_dist ) max_dist = dist;
@@ -61,268 +54,185 @@ void surf(Mat img1, Mat img2){
     
     std::vector< DMatch > good_matches;
     
-    for( int i = 0; i < des1.rows; i++ )
-    { if( matches[i].distance <= max(2*min_dist, 0.02) )
-    { good_matches.push_back( matches[i]); }
+    for( size_t i = 0; i < des1.rows; i++ ){
+        if( matches[i].distance <= max(2*min_dist, 0.02) ){
+            good_matches.push_back( matches[i]);
+        }
     }
     
-    //-- Draw only "good" matches
-    Mat img_matches;
-    drawMatches( img1, keypoints1, img2, keypoints2,
-                good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),
-                vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
+
+//    Mat img_matches;
+//    drawMatches( img1, keypoints1, img2, keypoints2,
+//                good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),
+//                vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
+
     
-    for( int i = 0; i < good_matches.size(); i++ )
-    {
-        printf( "-- Good Match [%d] Keypoint 1: %d  -- Keypoint 2: %d  \n", i, good_matches[i].queryIdx, good_matches[i].trainIdx );
-        
-        cout << keypoints1[good_matches[i].queryIdx].pt << endl;
+    for( int i = 0; i < good_matches.size(); i++ ){
+//        printf( "-- Good Match [%d] Keypoint 1: %d  -- Keypoint 2: %d  \n", i, good_matches[i].queryIdx, good_matches[i].trainIdx );
+        Point tmp((int) keypoints1[good_matches[i].queryIdx].pt.x,
+                  (int) keypoints1[good_matches[i].queryIdx].pt.y);
+        marker.push_back(tmp);
     }
     
-    //-- Show detected matches
-    imshow( "Good Matches", img_matches );
-    waitKey(0);
+//    imshow( "Good Matches", img_matches );
+//    waitKey(0);
+    
 }
+
+int h_min_slider;
+int s_min_slider;
+int v_min_slider;
+
+int h_max_slider;
+int s_max_slider;
+int v_max_slider;
+
+Mat img1;
+
+
+//void on_change () {
+//    Mat HSVImage;
+//    Mat processedImage;
+//    
+//    cvtColor(img1, HSVImage, CV_BGR2HSV); //convert image to HSV and save into HSVImage
+//    inRange(HSVImage, Scalar(h_min_slider,s_min_slider,v_min_slider),
+//            Scalar(h_max_slider,s_max_slider,v_max_slider), processedImage);
+//    
+//    imshow("Processed Image", processedImage);
+//    
+//    cout << "Min :: " << h_min_slider << " :: " << s_min_slider << " :: " << v_min_slider << endl;
+//    cout << "Max :: " << h_max_slider << " :: " << s_max_slider << " :: " << v_max_slider << endl;
+//    waitKey(30);
+//}
+
+//static void on_Hchange (int value,void *userData) {
+//    h_min_slider = value;
+//    on_change();
+//}
+//
+//static void on_Schange (int value, void *userData) {
+//    s_min_slider = value;
+//    on_change();
+//}
+//
+//static void on_Vchange (int value, void *userData) {
+//    v_min_slider = value;
+//    on_change();
+//}
+//
+//static void on_max_Hchange (int value,void *userData) {
+//    h_max_slider = value;
+//    on_change();
+//}
+//
+//static void on_max_Schange (int value, void *userData) {
+//    s_max_slider = value;
+//    on_change();
+//}
+//
+//static void on_max_Vchange (int value, void *userData) {
+//    v_max_slider = value;
+//    on_change();
+//}
+
+
 
 
 int main(int argc, const char * argv[]) {
     
-    Mat img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/15.JPG");
-    Mat img2 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/t3.png");
+    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/6.JPG");
+    Mat marker1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/marker1.png");
+    Mat marker2 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/marker2.png");
+    Mat marker3 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/marker3.png");
     
-//    Mat img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/15.JPG",1);
-//    Mat img2 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/template1.png", 1);
-    Mat img3 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/template2.png", 1);
-    Mat img4 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/template3.png", 1);
-    Mat img5 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/template4.png", 1);
+    Mat yellowMat, greenMat, pinkMat, orangeMat;
+    
+    vector<Point> markerPos;
+    vector<Point> posToDel;
+//    const float distanceThreshold = 10;
+    
+//    namedWindow("Trackbars",1);
+//    
+//    createTrackbar("max_H", "Trackbars", 0, 255,on_max_Hchange,&h_max_slider);
+//    createTrackbar("max_S", "Trackbars", 0, 255,on_max_Schange,&s_max_slider);
+//    createTrackbar("max_V", "Trackbars", 0, 255,on_max_Vchange,&v_max_slider);
+//
+//    
+//    createTrackbar("min_H", "Trackbars", 0, 255,on_Hchange,&h_min_slider);
+//    createTrackbar("min_S", "Trackbars", 0, 255,on_Schange,&s_min_slider);
+//    createTrackbar("min_V", "Trackbars", 0, 255,on_Vchange,&v_min_slider);
+
+    Mat HSVImage;
+    cvtColor(img1, HSVImage, CV_BGR2HSV); //convert image to HSV and save into HSVImage
+    
+    
+    getMarkerPos(img1, marker1,markerPos);
+    getMarkerPos(img1, marker2,markerPos);
+    getMarkerPos(img1, marker3,markerPos);
+    
+    inRange(HSVImage, Scalar(46,52,197), Scalar(81,255,255), greenMat);
+    inRange(HSVImage, Scalar(0,41,242), Scalar(21,255,255), orangeMat);
+    inRange(HSVImage, Scalar(114,45,179), Scalar(153,255,255), pinkMat);
+    inRange(HSVImage, Scalar(26,34,204), Scalar(40,255,255), yellowMat);
+
+    Mat output = greenMat + orangeMat + pinkMat + yellowMat;
 
     
-    freak(img1, img2);
+    cvtColor(greenMat, greenMat, CV_GRAY2BGR);
+    cvtColor(orangeMat, orangeMat, CV_GRAY2BGR);
+    cvtColor(pinkMat, pinkMat, CV_GRAY2BGR);
+    cvtColor(yellowMat, yellowMat, CV_GRAY2BGR);
+    cvtColor(output, output, CV_GRAY2BGR);
+    
+//    for(size_t i = 0; i < markerPos.size(); i++){
+//        circle(greenMat, markerPos[i], 10, Scalar(0,0,255));
+//    }
+    
+    Point yellowMarker, orangeMarker, greenMarker, pinkMarker;
+    double yellowSum = 0, orangeSum = 0, greenSum = 0, pinkSum = 0;
 
+    int offset = 10;
+    int area = 1000;
     
-    
-    
-    
-    vector<Point> correlationVect;
-    
-    int x1 = 0;
-    int y1 = 0;
-    int x2 = 24;
-    int y2 = 24;
-    int step = 6;
-    
-    
-//    Mat subImg(img1, Rect(790,400, 24,24));
-//    imshow("asd", subImg);
-//    waitKey(0);
-//    imwrite(DataManager::getInstance().FULL_PATH_PHOTO + "template4.png",subImg);
-    
-    
-    while(x1 + x2 < img1.cols){
-        while(y1 + y2 < img1.rows){
-            Mat subImg(img1, Rect(x1,y1, x2,y2));
-    
-            Mat pa = Mat::zeros(subImg.size(), CV_8UC1);
-            Mat pb = Mat::zeros(img2.size(), CV_8UC1);
-            Mat pc = Mat::zeros(img2.size(), CV_8UC1);
-            Mat pd = Mat::zeros(img2.size(), CV_8UC1);
-            Mat pe = Mat::zeros(img2.size(), CV_8UC1);
-            
-            logPolar(subImg, pa, Point2f(subImg.cols >> 1, subImg.rows >> 1), 5, WARP_FILL_OUTLIERS);
-            logPolar(img2, pb, Point2f(img2.cols >> 1, img2.rows >> 1), 5, WARP_FILL_OUTLIERS);
-            logPolar(img3, pc, Point2f(img3.cols >> 1, img3.rows >> 1), 5, WARP_FILL_OUTLIERS);
-            logPolar(img4, pd, Point2f(img4.cols >> 1, img4.rows >> 1), 5, WARP_FILL_OUTLIERS);
-            logPolar(img5, pe, Point2f(img5.cols >> 1, img5.rows >> 1), 5, WARP_FILL_OUTLIERS);
-            
-//            imshow("origin", subImg);
-//            imshow("template", img2);
-//            imshow("pa", pa);
-//            imshow("pb", pb);
-//            cout << x1 << " " << y1 << " " << x2 << " " << y2 << endl;
-            
-            cv::Mat match1, match2, match3, match4;
-            cv::matchTemplate(pa, pb, match1, CV_TM_CCORR_NORMED);
-            cv::matchTemplate(pa, pc, match2, CV_TM_CCORR_NORMED);
-            cv::matchTemplate(pa, pd, match3, CV_TM_CCORR_NORMED);
-            cv::matchTemplate(pa, pe, match4, CV_TM_CCORR_NORMED);
-//            double minVal, maxVal;
-//            cv::Point minLoc, maxLoc;
-//            cv::minMaxLoc(result, &minVal, &maxVal, &minLoc, &maxLoc);
-//            cv::Point screwCenter = maxLoc + cv::Point(pb.cols/2, pb.rows/2);
-            Point loc(x1,y1);
-            
-            if(match1.at<float>(0,0) >= 0.97f)
-                correlationVect.push_back(loc);
-            
-            if(match2.at<float>(0,0) >= 0.97f)
-                correlationVect.push_back(loc);
-            
-            if(match3.at<float>(0,0) >= 0.97f)
-                correlationVect.push_back(loc);
-            
-            if(match4.at<float>(0,0) >= 0.97f)
-                correlationVect.push_back(loc);
-            
-//            cout << result.at<float>(0,0) << endl;
-//            cout << screwCenter << endl;
-//            waitKey(0);
-            
-            
-            
-            
-//            cv::Mat pa_64f, pb_64f;
-//            pa.convertTo(pa_64f, CV_64FC1);
-//            pb.convertTo(pb_64f, CV_64FC1);
-//           z 
-//            Point2d pt = phaseCorrelate(pa_64f, pb_64f);
-//            correlationVect.push_back(pt);
-            
-            y1+=step;
+    for (size_t i = 0; i < markerPos.size(); i++){
+        //check green point
+        Mat green_(greenMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
+        Mat orange_(orangeMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
+        Mat yellow_(yellowMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
+        Mat pink_(pinkMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
+
+        if(cv::sum( yellow_ )[0] > area && cv::sum( yellow_ )[0] > yellowSum){
+            yellowSum = cv::sum( yellow_ )[0];
+            yellowMarker = markerPos[i];
+            cout << "yellow: " << yellowMarker << endl;
         }
-        y1 = 0;
-        x1+=step;
+        
+        if(cv::sum( orange_ )[0] > area && cv::sum( orange_ )[0] > orangeSum){
+            orangeSum = cv::sum( orange_ )[0];
+            orangeMarker = markerPos[i];
+            cout << "orange: " << orangeMarker << endl;
+        }
+        
+        if(cv::sum( green_ )[0] > area && cv::sum( green_ )[0] > greenSum){
+            greenSum = cv::sum( green_ )[0];
+            greenMarker = markerPos[i];
+            cout << "green: " << greenMarker << endl;
+        }
+        
+        if(cv::sum( pink_ )[0] > area && cv::sum( pink_ )[0] > pinkSum){
+            pinkSum = cv::sum( pink_ )[0];
+            pinkMarker = markerPos[i];
+            cout << "pink: " << pinkMarker << endl;
+        }
     }
 
-
-    cout << correlationVect.size() << endl;
-
+    circle(output, yellowMarker, 10, Scalar(0,0,255));
+    circle(output, orangeMarker, 10, Scalar(0,0,255));
+    circle(output, greenMarker, 10, Scalar(0,0,255));
+    circle(output, pinkMarker, 10, Scalar(0,0,255));
     
-    int h_bins = 50; int s_bins = 60;
-    int histSize[] = { h_bins, s_bins };
-    
-    float h_ranges[] = { 0, 180 };
-    float s_ranges[] = { 0, 256 };
-    
-    const float* ranges[] = { h_ranges, s_ranges };
-    
-    int channels[] = { 0, 1 };
-    
-    MatND hist_base1, hist_base2, hist_base3, hist_base4;
-    
-    cvtColor(img2, img2, COLOR_BGR2HSV);
-    cvtColor(img3, img3, COLOR_BGR2HSV);
-    cvtColor(img4, img4, COLOR_BGR2HSV);
-    cvtColor(img5, img5, COLOR_BGR2HSV);
-    
-    calcHist( &img2, 1, channels, Mat(), hist_base1, 2, histSize, ranges, true, false );
-    normalize( hist_base1, hist_base1, 0, 1, NORM_MINMAX, -1, Mat() );
-    
-    calcHist( &img3, 1, channels, Mat(), hist_base2, 2, histSize, ranges, true, false );
-    normalize( hist_base2, hist_base2, 0, 1, NORM_MINMAX, -1, Mat() );
-    
-    calcHist( &img4, 1, channels, Mat(), hist_base3, 2, histSize, ranges, true, false );
-    normalize( hist_base3, hist_base3, 0, 1, NORM_MINMAX, -1, Mat() );
-    
-    calcHist( &img5, 1, channels, Mat(), hist_base4, 2, histSize, ranges, true, false );
-    normalize( hist_base4, hist_base4, 0, 1, NORM_MINMAX, -1, Mat() );
-
-    int compare_method = 1;
-    
-    int miny = 100, mino = 100, ming = 100, minp = 100;
-    Point yellow, orange, green, pink;
-    
-    for(int i = 0; i < correlationVect.size(); i++){
-        
-        MatND hist_target;
-        Mat temp(img1, Rect(correlationVect[i].x,correlationVect[i].y, 24,24));
-        imshow("d", temp);
-        Mat tmp;
-        temp.copyTo(tmp);
-//        cout << i << endl;
-        
-        cvtColor( tmp, tmp, COLOR_BGR2HSV );
-        
-        calcHist( &tmp, 1, channels, Mat(), hist_target, 2, histSize, ranges, true, false );
-        normalize( hist_target, hist_target, 0, 1, NORM_MINMAX, -1, Mat() );
-        
-        double comparey = compareHist( hist_base1, hist_target, compare_method );
-        double compareo = compareHist( hist_base2, hist_target, compare_method );
-        double compareg = compareHist( hist_base3, hist_target, compare_method );
-        double comparep = compareHist( hist_base4, hist_target, compare_method );
-        
-        if(comparey < miny){
-            miny = comparey;
-            yellow = correlationVect[i];
-        }
-        
-        if(compareo < mino){
-            mino = compareo;
-            orange = correlationVect[i];;
-        }
-        
-        if(compareg < ming){
-            ming = compareg;
-            green = correlationVect[i];
-        }
-        
-        if(comparep < minp){
-            minp = comparep;
-            pink = correlationVect[i];
-        }
-        cout << "yellow: " << comparey << endl;
-        cout << "orange: " << compareo << endl;
-        cout << "green: " << compareg << endl;
-        cout << "pink: " << comparep << endl;
-        
-//        waitKey(0);
-    }
-    
-    Mat yelloImg(img1, Rect(yellow.x,yellow.y, 24,24));
-    Mat orangeImg(img1, Rect(orange.x,orange.y, 24,24));
-    Mat greenImg(img1, Rect(green.x,green.y, 24,24));
-    Mat pinkImg(img1, Rect(pink.x,pink.y, 24,24));
-    
-    imshow("yellow", yelloImg);
-    imshow("orange", orangeImg);
-    imshow("green", greenImg);
-    imshow("pink", pinkImg);
-    
+    imshow("asd", output);
     waitKey(0);
-
-
-    
-    
-    
-    
-    
-    
-    
-//    Mat pa = Mat::zeros(img1.size(), CV_8UC1);
-//    Mat pb = Mat::zeros(img2.size(), CV_8UC1);
-//
-//    logPolar(img1, pa, Point2f(img1.cols >> 1, img1.rows >> 1), 10, WARP_FILL_OUTLIERS);
-//    logPolar(img2, pb, Point2f(img2.cols >> 1, img2.rows >> 1), 10, WARP_FILL_OUTLIERS);
-//
-//    imshow("pa", pa);
-//    imshow("pb", pb);
-//    
-//    cv::Mat pa_64f, pb_64f;
-//    pa.convertTo(pa_64f, CV_64FC1);
-//    pb.convertTo(pb_64f, CV_64FC1);
-//
-//    Point2d pt = phaseCorrelate(pa_64f, pb_64f);
-//    float base = exp( log(img1.cols * 0.5f) / img1.cols * 0.5f);
-//    float scale = pow(base, pt.x);
-//    float rotate = pt.y*180/(img1.cols >> 1);
-//    
-//    cout << "Shift = " << pt << endl
-//    << "Rotation = " << cv::format("%.2f", rotate ) << endl
-//    << "Scale = " << cv::format("%.2f", scale )
-//    << endl;
-//
-//    Point2f src_center(img1.cols/2.0F, img1.rows/2.0F);
-//    Mat rot_mat = getRotationMatrix2D(src_center, rotate, 1.0);
-//    Mat dst;
-//    warpAffine(img1, dst, rot_mat, img1.size());
-//    
-//    
-//    resize(dst, dst, Size(), scale, scale, INTER_CUBIC);
-//    imshow("out", dst);
-//    imshow("img1", img1);
-//    imshow("img2", img2);
-    
-//    waitKey(0);
-    
     
     
 }
