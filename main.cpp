@@ -24,6 +24,75 @@ using namespace cv;
 using namespace std;
 using namespace ml;
 
+int h_min_slider;
+int s_min_slider;
+int v_min_slider;
+
+int h_max_slider;
+int s_max_slider;
+int v_max_slider;
+
+Mat img1;
+Point yellowMarker, blueMarker, greenMarker, pinkMarker;
+Mat yellowMat, greenMat, pinkMat, blueMat;
+bool lostCount[] = {false, false, false, false};
+
+void on_change () {
+    Mat HSVImage;
+    Mat processedImage;
+    
+    cvtColor(img1, HSVImage, CV_BGR2HSV); //convert image to HSV and save into HSVImage
+    inRange(HSVImage, Scalar(h_min_slider,s_min_slider,v_min_slider),
+            Scalar(h_max_slider,s_max_slider,v_max_slider), processedImage);
+    
+    imshow("Processed Image", processedImage);
+    
+    cout << "Min :: " << h_min_slider << " :: " << s_min_slider << " :: " << v_min_slider << endl;
+    cout << "Max :: " << h_max_slider << " :: " << s_max_slider << " :: " << v_max_slider << endl;
+    waitKey(30);
+}
+
+static void on_Hchange (int value,void *userData) {
+    h_min_slider = value;
+    on_change();
+}
+
+static void on_Schange (int value, void *userData) {
+    s_min_slider = value;
+    on_change();
+}
+
+static void on_Vchange (int value, void *userData) {
+    v_min_slider = value;
+    on_change();
+}
+
+static void on_max_Hchange (int value,void *userData) {
+    h_max_slider = value;
+    on_change();
+}
+
+static void on_max_Schange (int value, void *userData) {
+    s_max_slider = value;
+    on_change();
+}
+
+static void on_max_Vchange (int value, void *userData) {
+    v_max_slider = value;
+    on_change();
+}
+
+void showTrackbarHSV(){
+    namedWindow("Trackbars",1);
+    createTrackbar("max_H", "Trackbars", 0, 255,on_max_Hchange,&h_max_slider);
+    createTrackbar("max_S", "Trackbars", 0, 255,on_max_Schange,&s_max_slider);
+    createTrackbar("max_V", "Trackbars", 0, 255,on_max_Vchange,&v_max_slider);
+    createTrackbar("min_H", "Trackbars", 0, 255,on_Hchange,&h_min_slider);
+    createTrackbar("min_S", "Trackbars", 0, 255,on_Schange,&s_min_slider);
+    createTrackbar("min_V", "Trackbars", 0, 255,on_Vchange,&v_min_slider);
+    waitKey(0);
+}
+
 void getMarkerPos(Mat img1, Mat img2, vector<Point> &marker){
     
     vector<KeyPoint> keypoints1;
@@ -79,88 +148,166 @@ void getMarkerPos(Mat img1, Mat img2, vector<Point> &marker){
     
 }
 
-int h_min_slider;
-int s_min_slider;
-int v_min_slider;
+//enum DistanceBetween { NONE ,FAR, NEAR, NORMAL };
 
-int h_max_slider;
-int s_max_slider;
-int v_max_slider;
+struct MARKERINFO{
+    Point u;
+    Point v;
+    double distance;
+};
 
-Mat img1;
+struct MARKERSET{
+    Point u;
+    Point v;
+};
 
-
-//void on_change () {
-//    Mat HSVImage;
-//    Mat processedImage;
-//    
-//    cvtColor(img1, HSVImage, CV_BGR2HSV); //convert image to HSV and save into HSVImage
-//    inRange(HSVImage, Scalar(h_min_slider,s_min_slider,v_min_slider),
-//            Scalar(h_max_slider,s_max_slider,v_max_slider), processedImage);
-//    
-//    imshow("Processed Image", processedImage);
-//    
-//    cout << "Min :: " << h_min_slider << " :: " << s_min_slider << " :: " << v_min_slider << endl;
-//    cout << "Max :: " << h_max_slider << " :: " << s_max_slider << " :: " << v_max_slider << endl;
-//    waitKey(30);
-//}
-
-//static void on_Hchange (int value,void *userData) {
-//    h_min_slider = value;
-//    on_change();
-//}
-//
-//static void on_Schange (int value, void *userData) {
-//    s_min_slider = value;
-//    on_change();
-//}
-//
-//static void on_Vchange (int value, void *userData) {
-//    v_min_slider = value;
-//    on_change();
-//}
-//
-//static void on_max_Hchange (int value,void *userData) {
-//    h_max_slider = value;
-//    on_change();
-//}
-//
-//static void on_max_Schange (int value, void *userData) {
-//    s_max_slider = value;
-//    on_change();
-//}
-//
-//static void on_max_Vchange (int value, void *userData) {
-//    v_max_slider = value;
-//    on_change();
-//}
-
-
-
+bool calculateOtherMarkerPosition(Mat &output){
+    
+    int exist = 0;
+    vector<Point> _marker;
+    
+    Point I;
+    Point J;
+    Point K;
+    
+    MARKERINFO A;
+    MARKERINFO B;
+    MARKERINFO C;
+    
+    MARKERSET farSet;
+    MARKERSET normalSet;
+    MARKERSET nearSet;
+    
+    if(yellowMarker.x == 0 && yellowMarker.y ==0)
+        lostCount[0] = true;
+    else
+        _marker.push_back(yellowMarker);
+                           
+    if(blueMarker.x == 0 && blueMarker.y ==0)
+        lostCount[1] = true;
+    else
+        _marker.push_back(blueMarker);
+    
+    if(greenMarker.x == 0 && greenMarker.y ==0)
+        lostCount[2] = true;
+    else
+        _marker.push_back(greenMarker);
+    
+    if(pinkMarker.x == 0 && pinkMarker.y ==0)
+        lostCount[3] = true;
+    else
+        _marker.push_back(pinkMarker);
+    
+    for(size_t i = 0; i < 4; i++){
+        if(!lostCount[i])
+            exist++;
+    }
+    
+    if(exist <= 2) return false;
+    if(exist == 4) return true;
+    if(exist == 3){
+        
+        A.u = _marker[0];
+        A.v = _marker[1];
+        A.distance = norm(A.u - A.v);
+        
+        B.u = _marker[1];
+        B.v = _marker[2];
+        B.distance = norm(B.u - B.v);
+    
+        C.u = _marker[0];
+        C.v = _marker[2];
+        C.distance = norm(C.u - C.v);
+        
+        vector<double> distanceVect;
+        
+        distanceVect.push_back(A.distance);
+        distanceVect.push_back(B.distance);
+        distanceVect.push_back(C.distance);
+        
+        sort(distanceVect.begin(), distanceVect.end());
+        reverse(distanceVect.begin(), distanceVect.end());
+        
+        for(size_t i = 0; i < distanceVect.size(); i++){
+            double _distance = distanceVect[i];
+            
+            if(i == 0){
+                if(_distance == A.distance){
+                    farSet.u = A.u;
+                    farSet.v = A.v;
+                }
+                if(_distance == B.distance){
+                    farSet.u = B.u;
+                    farSet.v = B.v;
+                }
+                if(_distance == C.distance){
+                    farSet.u = C.u;
+                    farSet.v = C.v;
+                }
+            }
+            if(i == 1){
+                if(_distance == A.distance){
+                    normalSet.u = A.u;
+                    normalSet.v = A.v;
+                }
+                if(_distance == B.distance){
+                    normalSet.u = B.u;
+                    normalSet.v = B.v;
+                }
+                if(_distance == C.distance){
+                    normalSet.u = C.u;
+                    normalSet.v = C.v;
+                }
+            }
+            if(i == 2){
+                if(_distance == A.distance){
+                    nearSet.u = A.u;
+                    nearSet.v = A.v;
+                }
+                if(_distance == B.distance){
+                    nearSet.u = B.u;
+                    nearSet.v = B.v;
+                }
+                if(_distance == C.distance){
+                    nearSet.u = C.u;
+                    nearSet.v = C.v;
+                }
+            }
+        }
+        
+        if(nearSet.u == normalSet.u || nearSet.u == normalSet.v){
+            I = (nearSet.u == normalSet.u) ? normalSet.v : normalSet.u;
+            J = nearSet.u;
+            K = nearSet.v;
+        }
+        if(nearSet.v == normalSet.u || nearSet.v == normalSet.v){
+            I = (nearSet.v == normalSet.u) ? normalSet.v : normalSet.u;
+            J = nearSet.v;
+            K = nearSet.u;
+        }
+        Point tmp = I + (K - J);
+        
+        circle(output, tmp, 10, Scalar(0,0,255));
+        cout << tmp << endl;
+        
+    }
+    
+    return true;
+    
+    
+    
+}
 
 int main(int argc, const char * argv[]) {
     
-    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/6.JPG");
+//    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/6.JPG");
+    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking4/1.png");
     Mat marker1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/marker1.png");
     Mat marker2 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/marker2.png");
     Mat marker3 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/marker3.png");
     
-    Mat yellowMat, greenMat, pinkMat, orangeMat;
-    
     vector<Point> markerPos;
     vector<Point> posToDel;
-//    const float distanceThreshold = 10;
-    
-//    namedWindow("Trackbars",1);
-//    
-//    createTrackbar("max_H", "Trackbars", 0, 255,on_max_Hchange,&h_max_slider);
-//    createTrackbar("max_S", "Trackbars", 0, 255,on_max_Schange,&s_max_slider);
-//    createTrackbar("max_V", "Trackbars", 0, 255,on_max_Vchange,&v_max_slider);
-//
-//    
-//    createTrackbar("min_H", "Trackbars", 0, 255,on_Hchange,&h_min_slider);
-//    createTrackbar("min_S", "Trackbars", 0, 255,on_Schange,&s_min_slider);
-//    createTrackbar("min_V", "Trackbars", 0, 255,on_Vchange,&v_min_slider);
 
     Mat HSVImage;
     cvtColor(img1, HSVImage, CV_BGR2HSV); //convert image to HSV and save into HSVImage
@@ -171,15 +318,15 @@ int main(int argc, const char * argv[]) {
     getMarkerPos(img1, marker3,markerPos);
     
     inRange(HSVImage, Scalar(46,52,197), Scalar(81,255,255), greenMat);
-    inRange(HSVImage, Scalar(0,41,242), Scalar(21,255,255), orangeMat);
+    inRange(HSVImage, Scalar(94,127,228), Scalar(116,255,255), blueMat);
     inRange(HSVImage, Scalar(114,45,179), Scalar(153,255,255), pinkMat);
     inRange(HSVImage, Scalar(26,34,204), Scalar(40,255,255), yellowMat);
 
-    Mat output = greenMat + orangeMat + pinkMat + yellowMat;
+    Mat output = greenMat + blueMat + pinkMat + yellowMat;
 
     
     cvtColor(greenMat, greenMat, CV_GRAY2BGR);
-    cvtColor(orangeMat, orangeMat, CV_GRAY2BGR);
+    cvtColor(blueMat, blueMat, CV_GRAY2BGR);
     cvtColor(pinkMat, pinkMat, CV_GRAY2BGR);
     cvtColor(yellowMat, yellowMat, CV_GRAY2BGR);
     cvtColor(output, output, CV_GRAY2BGR);
@@ -188,8 +335,7 @@ int main(int argc, const char * argv[]) {
 //        circle(greenMat, markerPos[i], 10, Scalar(0,0,255));
 //    }
     
-    Point yellowMarker, orangeMarker, greenMarker, pinkMarker;
-    double yellowSum = 0, orangeSum = 0, greenSum = 0, pinkSum = 0;
+    double yellowSum = 0, blueSum = 0, greenSum = 0, pinkSum = 0;
 
     int offset = 10;
     int area = 1000;
@@ -197,7 +343,7 @@ int main(int argc, const char * argv[]) {
     for (size_t i = 0; i < markerPos.size(); i++){
         //check green point
         Mat green_(greenMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
-        Mat orange_(orangeMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
+        Mat orange_(blueMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
         Mat yellow_(yellowMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
         Mat pink_(pinkMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
 
@@ -207,10 +353,10 @@ int main(int argc, const char * argv[]) {
             cout << "yellow: " << yellowMarker << endl;
         }
         
-        if(cv::sum( orange_ )[0] > area && cv::sum( orange_ )[0] > orangeSum){
-            orangeSum = cv::sum( orange_ )[0];
-            orangeMarker = markerPos[i];
-            cout << "orange: " << orangeMarker << endl;
+        if(cv::sum( orange_ )[0] > area && cv::sum( orange_ )[0] > blueSum){
+            blueSum = cv::sum( orange_ )[0];
+            blueMarker = markerPos[i];
+            cout << "orange: " << blueMarker << endl;
         }
         
         if(cv::sum( green_ )[0] > area && cv::sum( green_ )[0] > greenSum){
@@ -225,9 +371,12 @@ int main(int argc, const char * argv[]) {
             cout << "pink: " << pinkMarker << endl;
         }
     }
-
+    
+    
+    calculateOtherMarkerPosition(output);
+    
     circle(output, yellowMarker, 10, Scalar(0,0,255));
-    circle(output, orangeMarker, 10, Scalar(0,0,255));
+    circle(output, blueMarker, 10, Scalar(0,0,255));
     circle(output, greenMarker, 10, Scalar(0,0,255));
     circle(output, pinkMarker, 10, Scalar(0,0,255));
     
