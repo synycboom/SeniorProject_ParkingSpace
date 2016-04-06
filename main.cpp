@@ -269,9 +269,79 @@ Point findFourthMarker(){
 //    vector<Vec4i> hierarchy;
     
     return fourth;
+}
+
+void findAccurateRectPoint(vector<Point> markerPos, int offset){
     
+    vector<Rect> rectPoint;
     
+    while(!markerPos.empty()){
+        
+        Point iPoint = markerPos.back(); markerPos.pop_back();
+        int x = iPoint.x, y = iPoint.y;
+        
+        Rect iArea(iPoint.x - offset, iPoint.y - offset, offset * 2, offset * 2);
+        rectPoint.push_back(iArea);
+        
+        
+        if(markerPos.empty())
+            continue;
+        
+        rectPoint.pop_back();
+        vector<Point> jPoint;
+        
+        cout << markerPos.size() << endl;
+        
+        //Select the points that are in the iArea
+        vector<size_t> indexToDel;
+        for(size_t i = 0; i < markerPos.size(); i++){
+            if( iArea.contains(markerPos[i]) ){
+                cout << iPoint << " contains: " << markerPos[i] << endl;
+                jPoint.push_back(markerPos[i]);
+//                indexToDel.push_back(i);
+                markerPos.erase(markerPos.begin() + i);
+                
+            }
+        }
+        
+        
+        
+//        vector<Point> temp;
+//        size_t index;
+//        int counter = 0;
+//        //Delete the selected points
+//        while(!indexToDel.empty()){
+//            index = indexToDel.back(); indexToDel.pop_back();
+//            for(; counter < index; counter++){
+//                temp.push_back(markerPos[counter]);
+//            }
+//        }
+//        
+//        markerPos.clear();
+//        markerPos = temp;
+
+        cout << markerPos.size() << endl;
+        
+        for(size_t i = 0; i < jPoint.size(); i++){
+            x += jPoint[i].x;
+            y += jPoint[i].y;
+        }
+        
+        x /= (jPoint.size() + 1);
+        y /= (jPoint.size() + 1);
+        
+        Rect jArea(x - offset, y - offset, offset * 2, offset * 2);
+        rectPoint.push_back(jArea);
+        
+        cout << "new " << endl;
+    }
     
+    for(size_t i = 0; i < rectPoint.size(); i++){
+        cout << rectPoint[i] << endl;
+        rectangle(img1, rectPoint[i], Scalar(0,0,255));
+    }
+    imshow("result", img1);
+    waitKey(0);
 }
 
 int main(int argc, const char * argv[]) {
@@ -286,7 +356,7 @@ int main(int argc, const char * argv[]) {
     
     vector<Point> markerPos;
     vector<Point> posToDel;
-
+    
     Mat HSVImage;
     cvtColor(img1, HSVImage, CV_BGR2HSV); //convert image to HSV and save into HSVImage
     
@@ -296,6 +366,11 @@ int main(int argc, const char * argv[]) {
     getMarkerPos(img1, marker2,markerPos);
     getMarkerPos(img1, marker3,markerPos);
     getMarkerPos(img1, marker4,markerPos);
+    
+    findAccurateRectPoint(markerPos, 10);
+    
+    
+    
     
     inRange(HSVImage, Scalar(46,52,197), Scalar(81,255,255), greenMat);
     inRange(HSVImage, Scalar(94,127,228), Scalar(116,255,255), blueMat);
