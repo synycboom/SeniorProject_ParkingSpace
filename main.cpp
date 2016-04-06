@@ -109,6 +109,11 @@ void getMarkerPos(Mat img1, Mat img2, vector<Point> &marker){
     detector->detectAndCompute(img1, Mat(), keypoints1, des1);
     detector->detectAndCompute(img2, Mat(), keypoints2, des2);
     
+//    Mat keypointImg;
+//    drawKeypoints(img2, keypoints2, keypointImg);
+//    imshow("Keypoint", keypointImg);
+//    waitKey(0);
+    
     FlannBasedMatcher matcher;
     std::vector< DMatch > matches;
     matcher.match( des1, des2, matches );
@@ -130,10 +135,10 @@ void getMarkerPos(Mat img1, Mat img2, vector<Point> &marker){
     }
     
 
-//    Mat img_matches;
-//    drawMatches( img1, keypoints1, img2, keypoints2,
-//                good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),
-//                vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
+    Mat img_matches;
+    drawMatches( img1, keypoints1, img2, keypoints2,
+                good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),
+                vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
 
     
     for( int i = 0; i < good_matches.size(); i++ ){
@@ -143,22 +148,15 @@ void getMarkerPos(Mat img1, Mat img2, vector<Point> &marker){
         marker.push_back(tmp);
     }
     
-//    imshow( "Good Matches", img_matches );
-//    waitKey(0);
+    imshow( "Good Matches", img_matches );
+    waitKey(0);
     
 }
-
-//enum DistanceBetween { NONE ,FAR, NEAR, NORMAL };
 
 struct MARKERINFO{
     Point u;
     Point v;
     double distance;
-};
-
-struct MARKERSET{
-    Point u;
-    Point v;
 };
 
 Point findFourthMarker(){
@@ -173,9 +171,9 @@ Point findFourthMarker(){
     MARKERINFO B;
     MARKERINFO C;
     
-    MARKERSET farSet;
-    MARKERSET normalSet;
-    MARKERSET nearSet;
+    MARKERINFO farSet;
+    MARKERINFO normalSet;
+    MARKERINFO nearSet;
     
     if(!(yellowMarker.x == 0 && yellowMarker.y ==0))
         _marker.push_back(yellowMarker);
@@ -266,6 +264,10 @@ Point findFourthMarker(){
     }
     Point fourth = I + (K - J);
     
+    
+//    vector<vector<Point> > contour;
+//    vector<Vec4i> hierarchy;
+    
     return fourth;
     
     
@@ -274,11 +276,13 @@ Point findFourthMarker(){
 
 int main(int argc, const char * argv[]) {
     
-    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/6.JPG");
-//    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking4/1.png");
-    Mat marker1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/marker1.png");
-    Mat marker2 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/marker2.png");
-    Mat marker3 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/marker3.png");
+//    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/3s.JPG");
+    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking4/7.png");
+    
+    Mat marker1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marker/marker1.png");
+    Mat marker2 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marker/marker2.png");
+    Mat marker3 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marker/marker3.png");
+    Mat marker4 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marker/marker4.png");
     
     vector<Point> markerPos;
     vector<Point> posToDel;
@@ -286,10 +290,12 @@ int main(int argc, const char * argv[]) {
     Mat HSVImage;
     cvtColor(img1, HSVImage, CV_BGR2HSV); //convert image to HSV and save into HSVImage
     
+//    inRange(HSVImage, Scalar(26,34,204), Scalar(40,255,255), img1);
     
     getMarkerPos(img1, marker1,markerPos);
     getMarkerPos(img1, marker2,markerPos);
     getMarkerPos(img1, marker3,markerPos);
+    getMarkerPos(img1, marker4,markerPos);
     
     inRange(HSVImage, Scalar(46,52,197), Scalar(81,255,255), greenMat);
     inRange(HSVImage, Scalar(94,127,228), Scalar(116,255,255), blueMat);
@@ -317,7 +323,7 @@ int main(int argc, const char * argv[]) {
     for (size_t i = 0; i < markerPos.size(); i++){
         //check green point
         Mat green_(greenMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
-        Mat orange_(blueMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
+        Mat blue_(blueMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
         Mat yellow_(yellowMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
         Mat pink_(pinkMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
 
@@ -327,10 +333,10 @@ int main(int argc, const char * argv[]) {
             cout << "yellow: " << yellowMarker << endl;
         }
         
-        if(cv::sum( orange_ )[0] > area && cv::sum( orange_ )[0] > blueSum){
-            blueSum = cv::sum( orange_ )[0];
+        if(cv::sum( blue_ )[0] > area && cv::sum( blue_ )[0] > blueSum){
+            blueSum = cv::sum( blue_ )[0];
             blueMarker = markerPos[i];
-            cout << "orange: " << blueMarker << endl;
+            cout << "blue: " << blueMarker << endl;
         }
         
         if(cv::sum( green_ )[0] > area && cv::sum( green_ )[0] > greenSum){
@@ -347,9 +353,10 @@ int main(int argc, const char * argv[]) {
     }
     
     
+//    findFourthMarker()
     
     circle(output, yellowMarker, 10, Scalar(0,0,255));
-    circle(output, findFourthMarker(), 10, Scalar(0,0,255));
+    circle(output, blueMarker, 10, Scalar(0,0,255));
     circle(output, greenMarker, 10, Scalar(0,0,255));
     circle(output, pinkMarker, 10, Scalar(0,0,255));
     
