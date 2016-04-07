@@ -20,6 +20,8 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "SVMTest.cpp"
 #include "HistogramTool.cpp"
+#include <map>
+
 using namespace cv;
 using namespace std;
 using namespace ml;
@@ -31,6 +33,11 @@ int v_min_slider;
 int h_max_slider;
 int s_max_slider;
 int v_max_slider;
+
+const int YELLOW = 0;
+const int BLUE = 1;
+const int GREEN = 2;
+const int PINK = 3;
 
 Mat img1;
 Point yellowMarker, blueMarker, greenMarker, pinkMarker;
@@ -93,6 +100,19 @@ void showTrackbarHSV(){
     waitKey(0);
 }
 
+std::vector<std::string> split(const std::string &text, char sep) {
+    std::vector<std::string> tokens;
+    std::size_t start = 0, end = 0;
+    while ((end = text.find(sep, start)) != std::string::npos) {
+        std::string temp = text.substr(start, end - start);
+        if (temp != "") tokens.push_back(temp);
+        start = end + 1;
+    }
+    std::string temp = text.substr(start);
+    if (temp != "") tokens.push_back(temp);
+    return tokens;
+}
+
 void getMarkerPos(Mat img1, Mat img2, vector<Point> &marker){
     
     vector<KeyPoint> keypoints1;
@@ -102,19 +122,22 @@ void getMarkerPos(Mat img1, Mat img2, vector<Point> &marker){
     int minHessian = 600;
     
     Ptr<xfeatures2d::SURF> detector = xfeatures2d::SURF::create( minHessian );
-    
+//    Ptr<AKAZE> detector = AKAZE::create();
     detector->detect( img1, keypoints1 );
     detector->detect( img2, keypoints2 );
     
     detector->detectAndCompute(img1, Mat(), keypoints1, des1);
     detector->detectAndCompute(img2, Mat(), keypoints2, des2);
     
-//    Mat keypointImg;
-//    drawKeypoints(img2, keypoints2, keypointImg);
-//    imshow("Keypoint", keypointImg);
+//    Mat keypointImg1, keypointImg2;
+//    drawKeypoints(img1, keypoints1, keypointImg1, Scalar(0,0,255));
+//    drawKeypoints(img2, keypoints2, keypointImg2);
+//    imshow("asd", keypointImg1);
+//    imshow("Keypoint", keypointImg2);
 //    waitKey(0);
     
     FlannBasedMatcher matcher;
+//    BFMatcher matcher;
     std::vector< DMatch > matches;
     matcher.match( des1, des2, matches );
     
@@ -138,8 +161,8 @@ void getMarkerPos(Mat img1, Mat img2, vector<Point> &marker){
     Mat img_matches;
     drawMatches( img1, keypoints1, img2, keypoints2,
                 good_matches, img_matches, Scalar::all(-1), Scalar::all(-1),
-                vector<char>(), DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS );
-
+                vector<char>(), DrawMatchesFlags::DEFAULT );
+    
     
     for( int i = 0; i < good_matches.size(); i++ ){
 //        printf( "-- Good Match [%d] Keypoint 1: %d  -- Keypoint 2: %d  \n", i, good_matches[i].queryIdx, good_matches[i].trainIdx );
@@ -148,8 +171,8 @@ void getMarkerPos(Mat img1, Mat img2, vector<Point> &marker){
         marker.push_back(tmp);
     }
     
-    imshow( "Good Matches", img_matches );
-    waitKey(0);
+//    imshow( "Good Matches", img_matches );
+//    waitKey(0);
     
 }
 
@@ -271,9 +294,11 @@ Point findFourthMarker(){
     return fourth;
 }
 
-void findAccurateRectPoint(vector<Point> markerPos, int offset){
+
+vector<Point> findAccurateRectPoint(vector<Point> markerPos, int offset){
     
     vector<Rect> rectPoint;
+    vector<Point> tmp;
     
     while(!markerPos.empty()){
         
@@ -282,45 +307,40 @@ void findAccurateRectPoint(vector<Point> markerPos, int offset){
         
         Rect iArea(iPoint.x - offset, iPoint.y - offset, offset * 2, offset * 2);
         rectPoint.push_back(iArea);
-        
+        tmp.push_back(iPoint);
         
         if(markerPos.empty())
             continue;
         
         rectPoint.pop_back();
+        tmp.pop_back();
         vector<Point> jPoint;
         
-        cout << markerPos.size() << endl;
+//        cout << markerPos.size() << endl;
         
         //Select the points that are in the iArea
-        vector<size_t> indexToDel;
+        //and delete it all
         for(size_t i = 0; i < markerPos.size(); i++){
             if( iArea.contains(markerPos[i]) ){
                 cout << iPoint << " contains: " << markerPos[i] << endl;
                 jPoint.push_back(markerPos[i]);
-//                indexToDel.push_back(i);
                 markerPos.erase(markerPos.begin() + i);
                 
             }
         }
         
+        //Delete duplicate Point
+        for(size_t i = 0; i < markerPos.size(); i++){
+            for(size_t j = 0; j < markerPos.size(); j++){
+                if(i == j) continue;
+                if(markerPos[i].x == markerPos[j].x && markerPos[i].y == markerPos[j].y){
+                    markerPos.erase(markerPos.begin() + i);
+                }
+            }
+            
+        }
         
-        
-//        vector<Point> temp;
-//        size_t index;
-//        int counter = 0;
-//        //Delete the selected points
-//        while(!indexToDel.empty()){
-//            index = indexToDel.back(); indexToDel.pop_back();
-//            for(; counter < index; counter++){
-//                temp.push_back(markerPos[counter]);
-//            }
-//        }
-//        
-//        markerPos.clear();
-//        markerPos = temp;
-
-        cout << markerPos.size() << endl;
+//        cout << markerPos.size() << endl;
         
         for(size_t i = 0; i < jPoint.size(); i++){
             x += jPoint[i].x;
@@ -332,22 +352,191 @@ void findAccurateRectPoint(vector<Point> markerPos, int offset){
         
         Rect jArea(x - offset, y - offset, offset * 2, offset * 2);
         rectPoint.push_back(jArea);
+        tmp.push_back(Point(x,y));
         
-        cout << "new " << endl;
+//        cout << "Next " << endl;
     }
     
-    for(size_t i = 0; i < rectPoint.size(); i++){
-        cout << rectPoint[i] << endl;
-        rectangle(img1, rectPoint[i], Scalar(0,0,255));
+//        for(size_t i = 0; i < rectPoint.size(); i++){
+//            rectangle(img1, rectPoint[i], Scalar(0,0,255));
+//        }
+//        imshow("result", img1);
+//        waitKey(0);
+    
+    return tmp;
+}
+
+void getScore(vector<Point> markerPos, vector<Point> score[], int minArea = 1000, int offset = 10){
+    
+    for (size_t i = 0; i < markerPos.size(); i++){
+        //check green point
+        Mat green_(greenMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
+        Mat blue_(blueMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
+        Mat yellow_(yellowMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
+        Mat pink_(pinkMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
+        
+        if(cv::sum( yellow_ )[0] > minArea ){
+            score[YELLOW].push_back(markerPos[i]);
+        }
+        
+        if(cv::sum( blue_ )[0] > minArea){
+            score[BLUE].push_back(markerPos[i]);
+        }
+        
+        if(cv::sum( green_ )[0] > minArea){
+            score[GREEN].push_back(markerPos[i]);
+        }
+        
+        if(cv::sum( pink_ )[0] > minArea ){
+            score[PINK].push_back(markerPos[i]);
+        }
     }
-    imshow("result", img1);
-    waitKey(0);
+}
+
+Point getHighestPointScore(map<string, int> pointScore, int color){
+    //if all points are not equal this function will return the point that has highest score
+    //otherwise this function will return the point with highest area in the color
+    int max = 0, round = 1, prevScore = 0;
+    bool isAllEqual = true;
+    string maxString = "";
+    typedef map<string, int>::iterator it_type;
+    for(it_type iterator = pointScore.begin(); iterator != pointScore.end(); iterator++, round++) {
+        // iterator->first = key
+        // iterator->second = value
+        if(iterator->second > max){
+            max = iterator->second;
+            maxString = iterator->first;
+        }
+        
+        //to check whether all scores are equal
+        if(round == 1){
+            prevScore = iterator->second;
+            continue;
+        }
+        
+        cout << iterator->first << " " << iterator->second << endl;
+        if(prevScore != iterator->second)
+            isAllEqual = false;
+        
+    }
+    
+    if(isAllEqual){
+        cout << "All equal" << endl;
+        Mat colorMat;
+        switch (color) {
+            case 0:
+                colorMat = yellowMat;
+                break;
+            case 1:
+                colorMat = blueMat;
+                break;
+            case 2:
+                colorMat = greenMat;
+                break;
+            case 3:
+                colorMat = pinkMat;
+                break;
+            default: break;
+        }
+        
+        int maxArea = 0;
+        Point maxPoint;
+
+        //Find the point that has maximum area
+        for(it_type iterator = pointScore.begin(); iterator != pointScore.end(); iterator++) {
+            
+            vector<string> tmp =  split(iterator->first, '|');
+            Point p(stoi(tmp[0]), stoi(tmp[1]));
+            
+            Mat colorArea_(colorMat, Rect(p.x - 10, p.y - 10,20,20));
+            if(sum( colorArea_ )[0] > maxArea){
+                maxArea = sum( colorArea_ )[0];
+                maxPoint = p;
+            }
+        }
+
+        return maxPoint;
+    }
+    
+        
+    vector<string> tmp =  split(maxString, '|');
+    return Point(stoi(tmp[0]), stoi(tmp[1]));
+}
+
+
+string getPosString(Point p){
+    return to_string(p.x) + "|" + to_string(p.y);
+}
+
+void setMarkerByScore(const vector<Point> score[]){
+    Point marker[4];
+    for(int i = 0; i < 4; i++){
+        map<string,int> pointScore;
+        
+        for(size_t j = 0; j < score[i].size(); j++){
+            pointScore[getPosString(score[i][j])] += 1;
+        }
+        
+        //if the color has no score then ignored
+        if(score[i].size() == 0)
+            continue;
+        
+        marker[i] = getHighestPointScore(pointScore, i);
+    }
+    yellowMarker = marker[YELLOW];
+    blueMarker = marker[BLUE];
+    greenMarker = marker[GREEN];
+    pinkMarker = marker[PINK];
+}
+
+
+
+void setMarkerByMaximumArea(vector<Point> markerPos,int minArea = 1000,int offset = 10){
+    double yellowSum = 0, blueSum = 0, greenSum = 0, pinkSum = 0;
+    
+    for (size_t i = 0; i < markerPos.size(); i++){
+        //check green point
+        Mat green_(greenMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
+        Mat blue_(blueMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
+        Mat yellow_(yellowMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
+        Mat pink_(pinkMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
+        
+        if(cv::sum( yellow_ )[0] > minArea && cv::sum( yellow_ )[0] > yellowSum){
+            yellowSum = cv::sum( yellow_ )[0];
+            yellowMarker = markerPos[i];
+            cout << "yellow: " << yellowMarker << endl;
+        }
+        
+        if(cv::sum( blue_ )[0] > minArea && cv::sum( blue_ )[0] > blueSum){
+            blueSum = cv::sum( blue_ )[0];
+            blueMarker = markerPos[i];
+            cout << "blue: " << blueMarker << endl;
+        }
+        
+        if(cv::sum( green_ )[0] > minArea && cv::sum( green_ )[0] > greenSum){
+            greenSum = cv::sum( green_ )[0];
+            greenMarker = markerPos[i];
+            cout << "green: " << greenMarker << endl;
+        }
+        
+        if(cv::sum( pink_ )[0] > minArea && cv::sum( pink_ )[0] > pinkSum){
+            pinkSum = cv::sum( pink_ )[0];
+            pinkMarker = markerPos[i];
+            cout << "pink: " << pinkMarker << endl;
+        }
+    }
+}
+
+void showScore(vector<Point> score[]){
+    for(size_t i = 0; i < 4; i++){
+        cout << score[i].size() << endl;
+    }
 }
 
 int main(int argc, const char * argv[]) {
     
-//    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/3s.JPG");
-    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking4/7.png");
+//    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/5.JPG");
+    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking4/1.png");
     
     Mat marker1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marker/marker1.png");
     Mat marker2 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marker/marker2.png");
@@ -360,14 +549,7 @@ int main(int argc, const char * argv[]) {
     Mat HSVImage;
     cvtColor(img1, HSVImage, CV_BGR2HSV); //convert image to HSV and save into HSVImage
     
-//    inRange(HSVImage, Scalar(26,34,204), Scalar(40,255,255), img1);
-    
-    getMarkerPos(img1, marker1,markerPos);
-    getMarkerPos(img1, marker2,markerPos);
-    getMarkerPos(img1, marker3,markerPos);
-    getMarkerPos(img1, marker4,markerPos);
-    
-    findAccurateRectPoint(markerPos, 10);
+    bool setByScore = true;
     
     
     
@@ -376,9 +558,8 @@ int main(int argc, const char * argv[]) {
     inRange(HSVImage, Scalar(94,127,228), Scalar(116,255,255), blueMat);
     inRange(HSVImage, Scalar(114,45,179), Scalar(153,255,255), pinkMat);
     inRange(HSVImage, Scalar(26,34,204), Scalar(40,255,255), yellowMat);
-
+    
     Mat output = greenMat + blueMat + pinkMat + yellowMat;
-
     
     cvtColor(greenMat, greenMat, CV_GRAY2BGR);
     cvtColor(blueMat, blueMat, CV_GRAY2BGR);
@@ -386,46 +567,72 @@ int main(int argc, const char * argv[]) {
     cvtColor(yellowMat, yellowMat, CV_GRAY2BGR);
     cvtColor(output, output, CV_GRAY2BGR);
     
+//    getMarkerPos(img1, marker1,markerPos);
+//    getMarkerPos(img1, marker2,markerPos);
+//    getMarkerPos(img1, marker3,markerPos);
+//    getMarkerPos(img1, marker4,markerPos);
+    
+    markerPos = findAccurateRectPoint(markerPos, 10);
+    
+    if(setByScore){
+        vector<Point> score[4];
+        
+        getMarkerPos(img1, marker1,markerPos);
+        markerPos = findAccurateRectPoint(markerPos, 10);
+        getScore(markerPos, score);
+        showScore(score);
+        
+        getMarkerPos(img1, marker2,markerPos);
+        markerPos = findAccurateRectPoint(markerPos, 10);
+        getScore(markerPos, score);
+        showScore(score);
+        
+        getMarkerPos(img1, marker3,markerPos);
+        markerPos = findAccurateRectPoint(markerPos, 10);
+        getScore(markerPos, score);
+        showScore(score);
+        
+        getMarkerPos(img1, marker4,markerPos);
+        markerPos = findAccurateRectPoint(markerPos, 10);
+        getScore(markerPos, score);
+        showScore(score);
+        
+        setMarkerByScore(score);
+    }
+    else{
+        getMarkerPos(img1, marker1,markerPos);
+        getMarkerPos(img1, marker2,markerPos);
+        getMarkerPos(img1, marker3,markerPos);
+        getMarkerPos(img1, marker4,markerPos);
+        
+        markerPos = findAccurateRectPoint(markerPos, 10);
+        setMarkerByMaximumArea(markerPos);
+    }
+    
+    
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+    
 //    for(size_t i = 0; i < markerPos.size(); i++){
 //        circle(greenMat, markerPos[i], 10, Scalar(0,0,255));
 //    }
     
-    double yellowSum = 0, blueSum = 0, greenSum = 0, pinkSum = 0;
-
-    int offset = 10;
-    int area = 1000;
     
-    for (size_t i = 0; i < markerPos.size(); i++){
-        //check green point
-        Mat green_(greenMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
-        Mat blue_(blueMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
-        Mat yellow_(yellowMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
-        Mat pink_(pinkMat, Rect(markerPos[i].x - offset, markerPos[i].y - offset, offset * 2 , offset * 2));
-
-        if(cv::sum( yellow_ )[0] > area && cv::sum( yellow_ )[0] > yellowSum){
-            yellowSum = cv::sum( yellow_ )[0];
-            yellowMarker = markerPos[i];
-            cout << "yellow: " << yellowMarker << endl;
-        }
-        
-        if(cv::sum( blue_ )[0] > area && cv::sum( blue_ )[0] > blueSum){
-            blueSum = cv::sum( blue_ )[0];
-            blueMarker = markerPos[i];
-            cout << "blue: " << blueMarker << endl;
-        }
-        
-        if(cv::sum( green_ )[0] > area && cv::sum( green_ )[0] > greenSum){
-            greenSum = cv::sum( green_ )[0];
-            greenMarker = markerPos[i];
-            cout << "green: " << greenMarker << endl;
-        }
-        
-        if(cv::sum( pink_ )[0] > area && cv::sum( pink_ )[0] > pinkSum){
-            pinkSum = cv::sum( pink_ )[0];
-            pinkMarker = markerPos[i];
-            cout << "pink: " << pinkMarker << endl;
-        }
-    }
     
     
 //    findFourthMarker()
