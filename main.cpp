@@ -100,15 +100,15 @@ void showTrackbarHSV(){
     waitKey(0);
 }
 
-std::vector<std::string> split(const std::string &text, char sep) {
-    std::vector<std::string> tokens;
-    std::size_t start = 0, end = 0;
+vector<string> split(const std::string &text, char sep) {
+    vector<string> tokens;
+    size_t start = 0, end = 0;
     while ((end = text.find(sep, start)) != std::string::npos) {
-        std::string temp = text.substr(start, end - start);
+        string temp = text.substr(start, end - start);
         if (temp != "") tokens.push_back(temp);
         start = end + 1;
     }
-    std::string temp = text.substr(start);
+    string temp = text.substr(start);
     if (temp != "") tokens.push_back(temp);
     return tokens;
 }
@@ -137,8 +137,7 @@ void getMarkerPos(Mat img1, Mat img2, vector<Point> &marker){
 //    waitKey(0);
     
     FlannBasedMatcher matcher;
-//    BFMatcher matcher;
-    std::vector< DMatch > matches;
+    vector< DMatch > matches;
     matcher.match( des1, des2, matches );
     
     double max_dist = 0; double min_dist = 100;
@@ -149,7 +148,7 @@ void getMarkerPos(Mat img1, Mat img2, vector<Point> &marker){
         if( dist > max_dist ) max_dist = dist;
     }
     
-    std::vector< DMatch > good_matches;
+    vector< DMatch > good_matches;
     
     for( size_t i = 0; i < des1.rows; i++ ){
         if( matches[i].distance <= max(2*min_dist, 0.02) ){
@@ -182,9 +181,41 @@ struct MARKERINFO{
     double distance;
 };
 
-Point findFourthMarker(){
+vector<Point> getAllPointInColor(Mat color){
+    Mat canny;
+    vector<Point> points;
+    vector<vector<Point> > contour;
+    vector<Vec4i> hierarchy;
     
-    vector<Point> _marker;
+    Canny( color, canny, 100, 200, 3 );
+    findContours( canny, contour, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
+    
+    for(size_t i = 0; i < contour.size(); i++){
+        Moments mom = moments(Mat(contour[i]));
+        points.push_back(Point(mom.m10/mom.m00,mom.m01/mom.m00));
+    }
+    
+    return points;
+}
+
+Point getNearestPoint(Point base, vector<Point> target, int maximumDistance){
+    double minDistance = 99999;
+    Point output;
+    for(size_t i = 0; i < target.size(); i++){
+        double distance = norm(base - target[i]);
+        if(distance < minDistance && distance < maximumDistance){
+            minDistance = distance;
+            output = target[i];
+        }
+    }
+    
+    if(minDistance == 99999)
+        return base;
+    else
+        return output;
+}
+
+Point findFourthMarker(vector<Point> _marker, Mat missingColor,int maximumDistance = 100){
     
     Point I;
     Point J;
@@ -197,15 +228,6 @@ Point findFourthMarker(){
     MARKERINFO farSet;
     MARKERINFO normalSet;
     MARKERINFO nearSet;
-    
-    if(!(yellowMarker.x == 0 && yellowMarker.y ==0))
-        _marker.push_back(yellowMarker);
-    if(!(blueMarker.x == 0 && blueMarker.y ==0))
-        _marker.push_back(blueMarker);
-    if(!(greenMarker.x == 0 && greenMarker.y ==0))
-        _marker.push_back(greenMarker);
-    if(!(pinkMarker.x == 0 && pinkMarker.y ==0))
-        _marker.push_back(pinkMarker);
     
     A.u = _marker[0];
     A.v = _marker[1];
@@ -287,10 +309,11 @@ Point findFourthMarker(){
     }
     Point fourth = I + (K - J);
     
-    
-//    vector<vector<Point> > contour;
-//    vector<Vec4i> hierarchy;
-    
+    vector<Point> points = getAllPointInColor(missingColor);
+
+    if(points.size() > 0){
+       fourth = getNearestPoint(fourth, points, maximumDistance);
+    }
     return fourth;
 }
 
@@ -316,13 +339,11 @@ vector<Point> findAccurateRectPoint(vector<Point> markerPos, int offset){
         tmp.pop_back();
         vector<Point> jPoint;
         
-//        cout << markerPos.size() << endl;
-        
         //Select the points that are in the iArea
         //and delete it all
         for(size_t i = 0; i < markerPos.size(); i++){
             if( iArea.contains(markerPos[i]) ){
-                cout << iPoint << " contains: " << markerPos[i] << endl;
+//                cout << iPoint << " contains: " << markerPos[i] << endl;
                 jPoint.push_back(markerPos[i]);
                 markerPos.erase(markerPos.begin() + i);
                 
@@ -339,8 +360,6 @@ vector<Point> findAccurateRectPoint(vector<Point> markerPos, int offset){
             }
             
         }
-        
-//        cout << markerPos.size() << endl;
         
         for(size_t i = 0; i < jPoint.size(); i++){
             x += jPoint[i].x;
@@ -366,7 +385,7 @@ vector<Point> findAccurateRectPoint(vector<Point> markerPos, int offset){
     return tmp;
 }
 
-void getScore(vector<Point> markerPos, vector<Point> score[], int minArea = 1000, int offset = 10){
+void getScore(vector<Point> markerPos, vector<Point> score[], int minArea = 2000, int offset = 10){
     
     for (size_t i = 0; i < markerPos.size(); i++){
         //check green point
@@ -408,20 +427,20 @@ Point getHighestPointScore(map<string, int> pointScore, int color){
             maxString = iterator->first;
         }
         
+        cout << iterator->first << " " << iterator->second << endl;
+        
         //to check whether all scores are equal
         if(round == 1){
             prevScore = iterator->second;
             continue;
         }
         
-        cout << iterator->first << " " << iterator->second << endl;
         if(prevScore != iterator->second)
             isAllEqual = false;
         
     }
     
     if(isAllEqual){
-        cout << "All equal" << endl;
         Mat colorMat;
         switch (color) {
             case 0:
@@ -489,8 +508,6 @@ void setMarkerByScore(const vector<Point> score[]){
     pinkMarker = marker[PINK];
 }
 
-
-
 void setMarkerByMaximumArea(vector<Point> markerPos,int minArea = 1000,int offset = 10){
     double yellowSum = 0, blueSum = 0, greenSum = 0, pinkSum = 0;
     
@@ -529,14 +546,73 @@ void setMarkerByMaximumArea(vector<Point> markerPos,int minArea = 1000,int offse
 
 void showScore(vector<Point> score[]){
     for(size_t i = 0; i < 4; i++){
-        cout << score[i].size() << endl;
+        cout << score[i].size() << " ";
     }
+    cout << endl;
+}
+
+int getSumArea(Mat m){
+    int sum = 0;
+    for(int i = 0; i < m.rows; i++)
+    for(int j = 0; j < m.cols; i++)
+        sum += (int) m.at<uchar>(j, i);
+    
+    return sum;
+}
+
+vector<Point> getMatchedMarker(vector<Point> marker){
+    vector<Point> output;
+    for(int i = 0; i < 4; i++){
+        if(marker[i].x != 0 && marker[i].y != 0)
+            output.push_back(marker[i]);
+    }
+    return output;
+}
+
+vector<Mat> getUnmatchedColor(vector<Point> marker, map<int,Mat> color){
+    vector<Mat> output;
+    map<int, bool> checkColor;
+    checkColor[YELLOW] = false;
+    checkColor[BLUE] = false;
+    checkColor[GREEN] = false;
+    checkColor[PINK] = false;
+    
+    for(int i = 0; i < marker.size(); i++){
+        if(marker[i].x == 0 && marker[i].y == 0)
+            continue;
+        
+        if(sum(Mat(color[YELLOW], Rect(marker[i].x - 5, marker[i].y - 5, 10,10)))[0] > 0)
+            checkColor[YELLOW] = true;
+        if(sum(Mat(color[BLUE], Rect(marker[i].x - 5, marker[i].y - 5, 10,10)))[0] > 0)
+            checkColor[BLUE] = true;
+        if(sum(Mat(color[GREEN], Rect(marker[i].x - 5, marker[i].y - 5, 10,10)))[0] > 0)
+            checkColor[GREEN] = true;
+        if(sum(Mat(color[PINK], Rect(marker[i].x - 5, marker[i].y - 5, 10,10)))[0] > 0)
+            checkColor[PINK] = true;
+    }
+    
+    if(!checkColor[YELLOW])
+        output.push_back(color[YELLOW]);
+    if(!checkColor[BLUE])
+        output.push_back(color[BLUE]);
+    if(!checkColor[GREEN])
+        output.push_back(color[GREEN]);
+    if(!checkColor[PINK])
+        output.push_back(color[PINK]);
+    
+    cout << output.size() << endl;
+    return output;
 }
 
 int main(int argc, const char * argv[]) {
     
-//    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/5.JPG");
-    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking4/1.png");
+    bool setByScore = true;
+    bool isRectangle = true;
+
+    for(int k = 1; k < 30; k++){
+        
+    //    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/3s.JPG");
+    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking4/" + to_string(k) +".png");
     
     Mat marker1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marker/marker1.png");
     Mat marker2 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marker/marker2.png");
@@ -546,55 +622,58 @@ int main(int argc, const char * argv[]) {
     vector<Point> markerPos;
     vector<Point> posToDel;
     
+    
     Mat HSVImage;
     cvtColor(img1, HSVImage, CV_BGR2HSV); //convert image to HSV and save into HSVImage
     
-    bool setByScore = true;
     
     
+//    showTrackbarHSV();
     
+    //using 2 ranges for green marker
+    Mat _greenMat;
     
-    inRange(HSVImage, Scalar(46,52,197), Scalar(81,255,255), greenMat);
+    inRange(HSVImage, Scalar(46,52,197), Scalar(81,255,255), _greenMat);
+    inRange(HSVImage, Scalar(46,131,177), Scalar(81,255,255), greenMat);
+    
     inRange(HSVImage, Scalar(94,127,228), Scalar(116,255,255), blueMat);
-    inRange(HSVImage, Scalar(114,45,179), Scalar(153,255,255), pinkMat);
+    
+//    inRange(HSVImage, Scalar(59,71,240), Scalar(116,255,255), blueMat);
+    inRange(HSVImage, Scalar(114,45,229), Scalar(153,255,255), pinkMat);
     inRange(HSVImage, Scalar(26,34,204), Scalar(40,255,255), yellowMat);
     
+    greenMat += _greenMat;
+    
+    medianBlur(greenMat, greenMat, 3);
+    medianBlur(blueMat, blueMat, 3);
+    medianBlur(pinkMat, pinkMat, 3);
+    medianBlur(yellowMat, yellowMat, 3);
+    
     Mat output = greenMat + blueMat + pinkMat + yellowMat;
-    
-    cvtColor(greenMat, greenMat, CV_GRAY2BGR);
-    cvtColor(blueMat, blueMat, CV_GRAY2BGR);
-    cvtColor(pinkMat, pinkMat, CV_GRAY2BGR);
-    cvtColor(yellowMat, yellowMat, CV_GRAY2BGR);
-    cvtColor(output, output, CV_GRAY2BGR);
-    
-//    getMarkerPos(img1, marker1,markerPos);
-//    getMarkerPos(img1, marker2,markerPos);
-//    getMarkerPos(img1, marker3,markerPos);
-//    getMarkerPos(img1, marker4,markerPos);
-    
-    markerPos = findAccurateRectPoint(markerPos, 10);
+//    Mat output = pinkMat;
+
     
     if(setByScore){
         vector<Point> score[4];
         
         getMarkerPos(img1, marker1,markerPos);
         markerPos = findAccurateRectPoint(markerPos, 10);
-        getScore(markerPos, score);
+        getScore(markerPos, score,2000);
         showScore(score);
         
         getMarkerPos(img1, marker2,markerPos);
         markerPos = findAccurateRectPoint(markerPos, 10);
-        getScore(markerPos, score);
+        getScore(markerPos, score,2000);
         showScore(score);
         
         getMarkerPos(img1, marker3,markerPos);
         markerPos = findAccurateRectPoint(markerPos, 10);
-        getScore(markerPos, score);
+        getScore(markerPos, score,2000);
         showScore(score);
         
         getMarkerPos(img1, marker4,markerPos);
         markerPos = findAccurateRectPoint(markerPos, 10);
-        getScore(markerPos, score);
+        getScore(markerPos, score,2000);
         showScore(score);
         
         setMarkerByScore(score);
@@ -637,13 +716,61 @@ int main(int argc, const char * argv[]) {
     
 //    findFourthMarker()
     
-    circle(output, yellowMarker, 10, Scalar(0,0,255));
-    circle(output, blueMarker, 10, Scalar(0,0,255));
-    circle(output, greenMarker, 10, Scalar(0,0,255));
-    circle(output, pinkMarker, 10, Scalar(0,0,255));
+//    Scalar(255,255,0)
+   
     
-    imshow("asd", output);
+        
+    vector<Point> matchedMarker_vect;
+    matchedMarker_vect.push_back(yellowMarker);
+    matchedMarker_vect.push_back(blueMarker);
+    matchedMarker_vect.push_back(greenMarker);
+    matchedMarker_vect.push_back(pinkMarker);
+        
+    map<int,Mat> colorMat_vect;
+    colorMat_vect[YELLOW] = yellowMat;
+    colorMat_vect[BLUE] = blueMat;
+    colorMat_vect[GREEN] = greenMat;
+    colorMat_vect[PINK] = pinkMat;
+        
+        
+    matchedMarker_vect = getMatchedMarker(matchedMarker_vect);
+    vector<Mat> missingColor = getUnmatchedColor(matchedMarker_vect, colorMat_vect);
+        
+    cvtColor(greenMat, greenMat, CV_GRAY2BGR);
+    cvtColor(blueMat, blueMat, CV_GRAY2BGR);
+    cvtColor(pinkMat, pinkMat, CV_GRAY2BGR);
+    cvtColor(yellowMat, yellowMat, CV_GRAY2BGR);
+    cvtColor(output, output, CV_GRAY2BGR);
+        
+    //show matched marker from surf
+    for(size_t i = 0; i < matchedMarker_vect.size(); i++){
+        circle(output, matchedMarker_vect[i], 10, Scalar(0,0,255));
+        circle(img1, matchedMarker_vect[i], 10, Scalar(0,0,255));
+    }
+        
+    if(matchedMarker_vect.size() == 3){
+        int maximumDistance = 200;
+        Point fourthMaker = findFourthMarker(matchedMarker_vect,missingColor[0], maximumDistance);
+        matchedMarker_vect.push_back(fourthMaker);
+        
+        //show matched marker from the forth point approximation
+        circle(output, fourthMaker, maximumDistance, Scalar(255,255,0));
+        circle(output, fourthMaker, 2, Scalar(255,255,0));
+        circle(img1, fourthMaker, maximumDistance, Scalar(255,255,0));
+    }
+        
+//        vector<Point> points = getAllPointInColor(yellowMat);
+//        
+//        for(size_t i = 0; i < points.size(); i++){
+//            circle(output, points[i], 10, Scalar(0,0,255));
+//            circle(img1, points[i], 10, Scalar(0,0,255));
+//        }
+
+        
+    imshow("res", img1);
+    imshow("binary", output);
     waitKey(0);
     
+    }
     
 }
