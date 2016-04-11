@@ -22,6 +22,8 @@
 #include "HistogramTool.cpp"
 #include <map>
 
+#define PI 3.14159265358979323846
+
 using namespace cv;
 using namespace std;
 using namespace ml;
@@ -35,13 +37,26 @@ int s_max_slider;
 int v_max_slider;
 
 const int YELLOW = 0;
-const int BLUE = 1;
-const int GREEN = 2;
-const int PINK = 3;
+const int GREEN = 1;
+const int PINK = 2;
+const int BLUE = 3;
 
 Mat img1;
 Point yellowMarker, blueMarker, greenMarker, pinkMarker;
 Mat yellowMat, greenMat, pinkMat, blueMat;
+
+//The arrangement will order from the left corner -> the right corner -> the bottom right corner
+// -> the bottom left corner
+//////////////////////////////////
+//  YELLOW -- -- -- -- -- GREEN //
+//    ||                    ||  //
+//    ||                    ||  //
+//   BLUE  -- -- -- -- --  PINK //
+//////////////////////////////////
+const int arrangement[] = {YELLOW, GREEN, PINK, BLUE};
+Mat arrangementMat[] = {yellowMat, greenMat, pinkMat, blueMat};
+
+
 bool lostCount[] = {false, false, false, false};
 
 void on_change () {
@@ -189,10 +204,13 @@ vector<Point> getAllPointInColor(Mat color){
     
     Canny( color, canny, 100, 200, 3 );
     findContours( canny, contour, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
-    
+
     for(size_t i = 0; i < contour.size(); i++){
         Moments mom = moments(Mat(contour[i]));
-        points.push_back(Point(mom.m10/mom.m00,mom.m01/mom.m00));
+        if(contourArea(contour[i]) == 0)
+            points.push_back(contour[i][contour[i].size() / 2]);
+        else
+            points.push_back(Point(mom.m10/mom.m00,mom.m01/mom.m00));
     }
     
     return points;
@@ -308,7 +326,7 @@ Point findFourthMarker(vector<Point> _marker, Mat missingColor,int maximumDistan
         K = nearSet.u;
     }
     Point fourth = I + (K - J);
-    
+
     vector<Point> points = getAllPointInColor(missingColor);
 
     if(points.size() > 0){
@@ -317,6 +335,252 @@ Point findFourthMarker(vector<Point> _marker, Mat missingColor,int maximumDistan
     return fourth;
 }
 
+
+bool findTwoMarkers(map<int,Point> &matchedMarker,vector<Mat> lostColorMat,
+                             vector<int> matchColorCode, float distance,
+                             Mat output,int area = 200){
+    
+    bool result = true;
+    
+    MARKERINFO I;
+    Point direction1, direction2, direction;
+    
+    //YELLOW and GREEN are not lost
+    if((matchColorCode[0] == arrangement[0] && matchColorCode[1] == arrangement[1] ) ||
+       (matchColorCode[1] == arrangement[0] && matchColorCode[0] == arrangement[1]) ){
+        cout << "YELLOW and GREEN are not lost" << endl;
+        
+        I.u = matchedMarker[0];
+        I.v = matchedMarker[1];
+        direction = ( I.u - I.v );
+        
+        //To rotate direction
+        //for YELLOW : u
+        direction1.x = floor( direction.x * cos(-90.0 * PI / 180.0) - direction.y * sin(-90.0 * PI / 180.0) );
+        direction1.y = floor( direction.x * sin(-90.0 * PI / 180.0) + direction.y * cos(-90.0 * PI / 180.0) );
+        //for GREEN : v
+        direction2.x = floor( direction.x * cos(-90.0 * PI / 180.0) - direction.y * sin(-90.0 * PI / 180.0) );
+        direction2.y = floor( direction.x * sin(-90.0 * PI / 180.0) + direction.y * cos(-90.0 * PI / 180.0) );
+        
+        Point approxPink = I.v + direction2 / distance;
+        Point approxBlue = I.u + direction1 / distance;
+        Point _approxPink = approxPink;
+        Point _approxBlue = approxBlue;
+        
+        circle(output, approxPink, area, Scalar(255,0,255));
+        circle(output, approxBlue, area, Scalar(255,0,255));
+        
+        vector<Point> pinkPoints = getAllPointInColor(pinkMat);
+        if(pinkPoints.size() > 0){
+            approxPink = getNearestPoint(approxPink, pinkPoints, area);
+        }
+
+        vector<Point> bluePoints = getAllPointInColor(blueMat);
+        if(bluePoints.size() > 0){
+            approxBlue = getNearestPoint(approxBlue, bluePoints, area);
+        }
+
+        if( (approxPink.x == _approxPink.x && approxPink.y == _approxPink.y ) ||
+            (approxBlue.x == _approxBlue.x && approxBlue.y == _approxBlue.y))
+            result = false;
+        
+        matchedMarker[2] = approxPink;
+        matchedMarker[3] = approxBlue;
+        
+    }
+    //GREEN and PINK are not lost
+    if((matchColorCode[0] == arrangement[1] && matchColorCode[1] == arrangement[2] ) ||
+       (matchColorCode[1] == arrangement[1] && matchColorCode[0] == arrangement[2]) ){
+        cout << "GREEN and PINK are not lost" << endl;
+        
+        I.u = matchedMarker[1];
+        I.v = matchedMarker[2];
+        direction = ( I.u - I.v );
+        
+        //To rotate direction
+        //for GREEN : u
+        direction1.x = floor( direction.x * cos(-90.0 * PI / 180.0) - direction.y * sin(-90.0 * PI / 180.0) );
+        direction1.y = floor( direction.x * sin(-90.0 * PI / 180.0) + direction.y * cos(-90.0 * PI / 180.0) );
+        //for PINK : v
+        direction2.x = floor( direction.x * cos(-90.0 * PI / 180.0) - direction.y * sin(-90.0 * PI / 180.0) );
+        direction2.y = floor( direction.x * sin(-90.0 * PI / 180.0) + direction.y * cos(-90.0 * PI / 180.0) );
+        
+        Point approxYellow = I.u + direction2 * distance;
+        Point approxBlue = I.v + direction1 * distance;
+        Point _approxYellow = approxYellow;
+        Point _approxBlue = approxBlue;
+        
+        circle(output, approxYellow, area, Scalar(255,0,255));
+        circle(output, approxBlue, area, Scalar(255,0,255));
+        
+        vector<Point> yellowPoints = getAllPointInColor(yellowMat);
+        if(yellowPoints.size() > 0){
+            approxYellow = getNearestPoint(approxYellow, yellowPoints, area);
+        }
+        
+        vector<Point> bluePoints = getAllPointInColor(blueMat);
+        if(bluePoints.size() > 0){
+            approxBlue = getNearestPoint(approxBlue, bluePoints, area);
+        }
+        
+        if( (approxYellow.x == _approxYellow.x && approxYellow.y == _approxYellow.y ) ||
+           (approxBlue.x == _approxBlue.x && approxBlue.y == _approxBlue.y))
+            result = false;
+        
+        matchedMarker[0] = approxYellow;
+        matchedMarker[3] = approxBlue;
+    }
+    //PINK and BLUE are not lost
+    if((matchColorCode[0] == arrangement[2] && matchColorCode[1] == arrangement[3] ) ||
+       (matchColorCode[1] == arrangement[2] && matchColorCode[0] == arrangement[3]) ){
+        cout << "PINK and BLUE are not lost" << endl;
+        
+        I.u = matchedMarker[2];
+        I.v = matchedMarker[3];
+        direction = ( I.u - I.v );
+        
+        //To rotate direction
+        //for PINK : u
+        direction1.x = floor( direction.x * cos(-90.0 * PI / 180.0) - direction.y * sin(-90.0 * PI / 180.0) );
+        direction1.y = floor( direction.x * sin(-90.0 * PI / 180.0) + direction.y * cos(-90.0 * PI / 180.0) );
+        //for BLUE : u
+        direction2.x = floor( direction.x * cos(-90.0 * PI / 180.0) - direction.y * sin(-90.0 * PI / 180.0) );
+        direction2.y = floor( direction.x * sin(-90.0 * PI / 180.0) + direction.y * cos(-90.0 * PI / 180.0) );
+        
+        Point approxGreen = I.u + direction2 / distance;
+        Point approxYellow = I.v + direction1 / distance;
+        Point _approxGreen = approxGreen;
+        Point _approxYellow = approxYellow;
+        
+        circle(output, approxGreen, area, Scalar(255,0,255));
+        circle(output, approxYellow, area, Scalar(255,0,255));
+        
+        vector<Point> greenPoints = getAllPointInColor(greenMat);
+        if(greenPoints.size() > 0){
+            approxGreen = getNearestPoint(approxGreen, greenPoints, area);
+        }
+        
+        vector<Point> yellowPoints = getAllPointInColor(yellowMat);
+        if(yellowPoints.size() > 0){
+            approxYellow = getNearestPoint(approxYellow, yellowPoints, area);
+        }
+        
+        if( (approxGreen.x == _approxGreen.x && approxGreen.y == _approxGreen.y ) ||
+           (approxYellow.x == _approxYellow.x && approxYellow.y == _approxYellow.y))
+            result = false;
+        
+        matchedMarker[0] = approxYellow;
+        matchedMarker[1] = approxGreen;
+    }
+    //YELLOW and BLUE are not lost
+    if((matchColorCode[0] == arrangement[0] && matchColorCode[1] == arrangement[3] ) ||
+       (matchColorCode[1] == arrangement[0] && matchColorCode[0] == arrangement[3]) ){
+        cout << "YELLOW and BLUE are not lost" << endl;
+        
+        I.u = matchedMarker[0];
+        I.v = matchedMarker[3];
+        direction = ( I.u - I.v );
+        
+        //To rotate direction
+        //for YELLOW : u
+        direction1.x = floor( direction.x * cos(90.0 * PI / 180.0) - direction.y * sin(90.0 * PI / 180.0) );
+        direction1.y = floor( direction.x * sin(90.0 * PI / 180.0) + direction.y * cos(90.0 * PI / 180.0) );
+        //for BLUE : v
+        direction2.x = floor( direction.x * cos(90.0 * PI / 180.0) - direction.y * sin(90.0 * PI / 180.0) );
+        direction2.y = floor( direction.x * sin(90.0 * PI / 180.0) + direction.y * cos(90.0 * PI / 180.0) );
+        
+        Point approxGreen = I.u + direction2 * distance;
+        Point approxPink = I.v + direction1 * distance;
+        Point _approxGreen = approxGreen;
+        Point _approxPink = approxPink;
+        
+        circle(output, approxGreen, area, Scalar(255,0,255));
+        circle(output, approxPink, area, Scalar(255,0,255));
+        
+        vector<Point> greenPoints = getAllPointInColor(greenMat);
+        if(greenPoints.size() > 0){
+            approxGreen = getNearestPoint(approxGreen, greenPoints, area);
+        }
+        
+        vector<Point> pinkPoints = getAllPointInColor(pinkMat);
+        if(pinkPoints.size() > 0){
+            approxPink = getNearestPoint(approxPink, pinkPoints, area);
+        }
+        
+        if( (approxGreen.x == _approxGreen.x && approxGreen.y == _approxGreen.y ) ||
+           (approxPink.x == _approxPink.x && approxPink.y == _approxPink.y))
+            result = false;
+        
+        matchedMarker[1] = approxGreen;
+        matchedMarker[2] = approxPink;
+    }
+    //YELLOW and PINK are not lost
+    if((matchColorCode[0] == arrangement[0] && matchColorCode[1] == arrangement[2] ) ||
+       (matchColorCode[1] == arrangement[0] && matchColorCode[0] == arrangement[2]) ){
+        cout << "YELLOW and PINK are not lost" << endl;
+        I.u = matchedMarker[0];
+        I.v = matchedMarker[2];
+        
+        vector<Point> greenPoints = getAllPointInColor(greenMat);
+        vector<Point> bluePoints = getAllPointInColor(blueMat);
+        Point approxBlue;
+        Point approxGreen;
+        
+        circle(output, I.u, area, Scalar(255,0,255));
+        circle(output, I.v, area, Scalar(255,0,255));
+        
+        if(greenPoints.size() > 0){
+            approxGreen = greenPoints[0];
+            approxGreen = getNearestPoint(I.v, greenPoints, area * 2);
+        }
+        if(bluePoints.size() > 0){
+            approxBlue = bluePoints[0];
+            approxBlue = getNearestPoint(I.u, bluePoints, area * 2);
+        }
+
+        if( (approxBlue.x == I.u.x && approxBlue.y == I.u.y ) ||
+           (approxGreen.x == I.v.x && approxGreen.y == I.v.y))
+            result = false;
+        
+        matchedMarker[1] = approxGreen;
+        matchedMarker[3] = approxBlue;
+        
+    }
+    //GREEN and BLUE are not lost
+    if((matchColorCode[0] == arrangement[1] && matchColorCode[1] == arrangement[3] ) ||
+       (matchColorCode[1] == arrangement[1] && matchColorCode[0] == arrangement[3]) ){
+        cout << "GREEN and BLUE are not lost" << endl;
+        I.u = matchedMarker[1];
+        I.v = matchedMarker[3];
+        
+        vector<Point> pinkPoints = getAllPointInColor(pinkMat);
+        vector<Point> yellowPoints = getAllPointInColor(yellowMat);
+        Point approxPink;
+        Point approxYellow;
+
+        circle(output, I.u, area, Scalar(255,0,255));
+        circle(output, I.v, area, Scalar(255,0,255));
+        
+        if(pinkPoints.size() > 0){
+            approxPink = pinkPoints[0];
+            approxPink = getNearestPoint(I.u, pinkPoints, area * 2);
+        }
+        if(yellowPoints.size() > 0){
+            approxYellow = yellowPoints[0];
+            approxYellow = getNearestPoint(I.v, yellowPoints, area * 2);
+        }
+        
+        if( (approxPink.x == I.u.x && approxPink.y == I.u.y ) ||
+           (approxYellow.x == I.v.x && approxYellow.y == I.v.x))
+            result = false;
+        
+        matchedMarker[0] = approxYellow;
+        matchedMarker[2] = approxPink;
+        
+    }
+    
+    return result;
+}
 
 vector<Point> findAccurateRectPoint(vector<Point> markerPos, int offset){
     
@@ -447,13 +711,13 @@ Point getHighestPointScore(map<string, int> pointScore, int color){
                 colorMat = yellowMat;
                 break;
             case 1:
-                colorMat = blueMat;
-                break;
-            case 2:
                 colorMat = greenMat;
                 break;
-            case 3:
+            case 2:
                 colorMat = pinkMat;
+                break;
+            case 3:
+                colorMat = blueMat;
                 break;
             default: break;
         }
@@ -551,15 +815,6 @@ void showScore(vector<Point> score[]){
     cout << endl;
 }
 
-int getSumArea(Mat m){
-    int sum = 0;
-    for(int i = 0; i < m.rows; i++)
-    for(int j = 0; j < m.cols; i++)
-        sum += (int) m.at<uchar>(j, i);
-    
-    return sum;
-}
-
 vector<Point> getMatchedMarker(vector<Point> marker){
     vector<Point> output;
     for(int i = 0; i < 4; i++){
@@ -569,51 +824,44 @@ vector<Point> getMatchedMarker(vector<Point> marker){
     return output;
 }
 
-vector<Mat> getUnmatchedColor(vector<Point> marker, map<int,Mat> color){
+map<int ,Point> getMatchedMarkerMap(vector<Point> marker){
+    map<int ,Point> output;
+    for(int i = 0; i < 4; i++){
+        if(marker[i].x != 0 && marker[i].y != 0)
+            output[i] = marker[i];
+    }
+    return output;
+}
+
+vector<Mat> getUnmatchedColorMat(vector<Point> marker, map<int,Mat> color){
     vector<Mat> output;
-    map<int, bool> checkColor;
-    checkColor[YELLOW] = false;
-    checkColor[BLUE] = false;
-    checkColor[GREEN] = false;
-    checkColor[PINK] = false;
-    
     for(int i = 0; i < marker.size(); i++){
         if(marker[i].x == 0 && marker[i].y == 0)
-            continue;
-        
-        if(sum(Mat(color[YELLOW], Rect(marker[i].x - 5, marker[i].y - 5, 10,10)))[0] > 0)
-            checkColor[YELLOW] = true;
-        if(sum(Mat(color[BLUE], Rect(marker[i].x - 5, marker[i].y - 5, 10,10)))[0] > 0)
-            checkColor[BLUE] = true;
-        if(sum(Mat(color[GREEN], Rect(marker[i].x - 5, marker[i].y - 5, 10,10)))[0] > 0)
-            checkColor[GREEN] = true;
-        if(sum(Mat(color[PINK], Rect(marker[i].x - 5, marker[i].y - 5, 10,10)))[0] > 0)
-            checkColor[PINK] = true;
+            output.push_back(color[i]);
     }
-    
-    if(!checkColor[YELLOW])
-        output.push_back(color[YELLOW]);
-    if(!checkColor[BLUE])
-        output.push_back(color[BLUE]);
-    if(!checkColor[GREEN])
-        output.push_back(color[GREEN]);
-    if(!checkColor[PINK])
-        output.push_back(color[PINK]);
-    
-    cout << output.size() << endl;
+    return output;
+}
+
+vector<int> getMatchedColorCode(vector<Point> marker, map<int,Mat> color){
+    vector<int> output;
+    for(int i = 0; i < marker.size(); i++){
+        if(marker[i].x != 0 && marker[i].y != 0)
+            output.push_back(i);
+    }
     return output;
 }
 
 int main(int argc, const char * argv[]) {
     
     bool setByScore = true;
-    bool isRectangle = true;
+    int accuracyLevel = 0;
 
     for(int k = 1; k < 30; k++){
         
-    //    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/3s.JPG");
-    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking4/" + to_string(k) +".png");
-    
+//        img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/" + to_string(k) +".jpg");
+//    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking4/" + to_string(k) +".png");
+
+//            img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking4/20.png");
     Mat marker1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marker/marker1.png");
     Mat marker2 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marker/marker2.png");
     Mat marker3 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marker/marker3.png");
@@ -624,8 +872,7 @@ int main(int argc, const char * argv[]) {
     
     
     Mat HSVImage;
-    cvtColor(img1, HSVImage, CV_BGR2HSV); //convert image to HSV and save into HSVImage
-    
+    cvtColor(img1, HSVImage, CV_BGR2HSV);
     
     
 //    showTrackbarHSV();
@@ -687,44 +934,12 @@ int main(int argc, const char * argv[]) {
         markerPos = findAccurateRectPoint(markerPos, 10);
         setMarkerByMaximumArea(markerPos);
     }
-    
-    
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-
-    
-//    for(size_t i = 0; i < markerPos.size(); i++){
-//        circle(greenMat, markerPos[i], 10, Scalar(0,0,255));
-//    }
-    
-    
-    
-    
-//    findFourthMarker()
-    
-//    Scalar(255,255,0)
-   
-    
         
     vector<Point> matchedMarker_vect;
     matchedMarker_vect.push_back(yellowMarker);
-    matchedMarker_vect.push_back(blueMarker);
     matchedMarker_vect.push_back(greenMarker);
     matchedMarker_vect.push_back(pinkMarker);
+    matchedMarker_vect.push_back(blueMarker);
         
     map<int,Mat> colorMat_vect;
     colorMat_vect[YELLOW] = yellowMat;
@@ -733,8 +948,10 @@ int main(int argc, const char * argv[]) {
     colorMat_vect[PINK] = pinkMat;
         
         
+    vector<Mat> missingColorMat = getUnmatchedColorMat(matchedMarker_vect, colorMat_vect);
+    vector<int> matchColorCode = getMatchedColorCode(matchedMarker_vect, colorMat_vect);
+    map<int, Point> matchedMarker_map = getMatchedMarkerMap(matchedMarker_vect);
     matchedMarker_vect = getMatchedMarker(matchedMarker_vect);
-    vector<Mat> missingColor = getUnmatchedColor(matchedMarker_vect, colorMat_vect);
         
     cvtColor(greenMat, greenMat, CV_GRAY2BGR);
     cvtColor(blueMat, blueMat, CV_GRAY2BGR);
@@ -750,7 +967,7 @@ int main(int argc, const char * argv[]) {
         
     if(matchedMarker_vect.size() == 3){
         int maximumDistance = 200;
-        Point fourthMaker = findFourthMarker(matchedMarker_vect,missingColor[0], maximumDistance);
+        Point fourthMaker = findFourthMarker(matchedMarker_vect,missingColorMat[0], maximumDistance);
         matchedMarker_vect.push_back(fourthMaker);
         
         //show matched marker from the forth point approximation
@@ -758,13 +975,37 @@ int main(int argc, const char * argv[]) {
         circle(output, fourthMaker, 2, Scalar(255,255,0));
         circle(img1, fourthMaker, maximumDistance, Scalar(255,255,0));
     }
-        
-//        vector<Point> points = getAllPointInColor(yellowMat);
-//        
-//        for(size_t i = 0; i < points.size(); i++){
-//            circle(output, points[i], 10, Scalar(0,0,255));
-//            circle(img1, points[i], 10, Scalar(0,0,255));
+    if(matchedMarker_vect.size() == 2){
+        bool res = findTwoMarkers(matchedMarker_map, missingColorMat, matchColorCode,
+                                              //proportion between width and height equal 4:1
+                                              4.5, output, 200);
+        cout << "Result: " << res << endl;
+//        if(!res){
+//            return EXIT_FAILURE;
 //        }
+    }
+    if(matchedMarker_vect.size() == 1){
+        if(accuracyLevel == 0){
+            
+        }
+        if(accuracyLevel == 1){
+            cout << "Cannot detect marker" << endl;
+            return EXIT_FAILURE;
+        }
+    }
+    if(matchedMarker_vect.size() == 0){
+        if(accuracyLevel == 0){
+        }
+        if(accuracyLevel == 1){
+            cout << "Cannot detect marker" << endl;
+            return EXIT_FAILURE;
+        }
+    }
+        
+    circle(output, matchedMarker_map[YELLOW], 10, Scalar(0,0,255));
+    circle(output, matchedMarker_map[GREEN], 10, Scalar(0,0,255));
+    circle(output, matchedMarker_map[PINK], 10, Scalar(0,0,255));
+    circle(output, matchedMarker_map[BLUE], 10, Scalar(0,0,255));
 
         
     imshow("res", img1);
