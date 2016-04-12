@@ -9,6 +9,7 @@
 #include <iostream>
 #include <fstream>
 #include <array>
+#include <map>
 #include <opencv2/opencv.hpp>
 #include <opencv2/ml/ml.hpp>
 #include "opencv2/features2d/features2d.hpp"
@@ -20,7 +21,7 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "SVMTest.cpp"
 #include "HistogramTool.cpp"
-#include <map>
+
 
 #define PI 3.14159265358979323846
 
@@ -195,6 +196,13 @@ struct MARKERINFO{
     Point v;
     double distance;
 };
+
+bool isPointEqual(Point a, Point b){
+    if(a.x == b.x && a.y == b.y)
+        return true;
+    else
+        return false;
+}
 
 vector<Point> getAllPointInColor(Mat color){
     Mat canny;
@@ -380,8 +388,8 @@ bool findTwoMarkers(map<int,Point> &matchedMarker,vector<Mat> lostColorMat,
             approxBlue = getNearestPoint(approxBlue, bluePoints, area);
         }
 
-        if( (approxPink.x == _approxPink.x && approxPink.y == _approxPink.y ) ||
-            (approxBlue.x == _approxBlue.x && approxBlue.y == _approxBlue.y))
+        if( isPointEqual(approxPink ,_approxPink) ||
+            isPointEqual(approxBlue ,_approxBlue))
             result = false;
         
         matchedMarker[2] = approxPink;
@@ -423,8 +431,8 @@ bool findTwoMarkers(map<int,Point> &matchedMarker,vector<Mat> lostColorMat,
             approxBlue = getNearestPoint(approxBlue, bluePoints, area);
         }
         
-        if( (approxYellow.x == _approxYellow.x && approxYellow.y == _approxYellow.y ) ||
-           (approxBlue.x == _approxBlue.x && approxBlue.y == _approxBlue.y))
+        if( isPointEqual(approxYellow, _approxYellow) ||
+            isPointEqual(approxBlue, _approxBlue))
             result = false;
         
         matchedMarker[0] = approxYellow;
@@ -465,8 +473,8 @@ bool findTwoMarkers(map<int,Point> &matchedMarker,vector<Mat> lostColorMat,
             approxYellow = getNearestPoint(approxYellow, yellowPoints, area);
         }
         
-        if( (approxGreen.x == _approxGreen.x && approxGreen.y == _approxGreen.y ) ||
-           (approxYellow.x == _approxYellow.x && approxYellow.y == _approxYellow.y))
+        if( isPointEqual(approxGreen, _approxGreen) ||
+            isPointEqual(approxYellow, _approxYellow))
             result = false;
         
         matchedMarker[0] = approxYellow;
@@ -507,8 +515,8 @@ bool findTwoMarkers(map<int,Point> &matchedMarker,vector<Mat> lostColorMat,
             approxPink = getNearestPoint(approxPink, pinkPoints, area);
         }
         
-        if( (approxGreen.x == _approxGreen.x && approxGreen.y == _approxGreen.y ) ||
-           (approxPink.x == _approxPink.x && approxPink.y == _approxPink.y))
+        if( isPointEqual(approxGreen, _approxGreen) ||
+            isPointEqual(approxPink, _approxPink))
             result = false;
         
         matchedMarker[1] = approxGreen;
@@ -538,8 +546,8 @@ bool findTwoMarkers(map<int,Point> &matchedMarker,vector<Mat> lostColorMat,
             approxBlue = getNearestPoint(I.u, bluePoints, area * 2);
         }
 
-        if( (approxBlue.x == I.u.x && approxBlue.y == I.u.y ) ||
-           (approxGreen.x == I.v.x && approxGreen.y == I.v.y))
+        if( isPointEqual(approxBlue, I.u) ||
+            isPointEqual(approxGreen, I.v))
             result = false;
         
         matchedMarker[1] = approxGreen;
@@ -570,8 +578,8 @@ bool findTwoMarkers(map<int,Point> &matchedMarker,vector<Mat> lostColorMat,
             approxYellow = getNearestPoint(I.v, yellowPoints, area * 2);
         }
         
-        if( (approxPink.x == I.u.x && approxPink.y == I.u.y ) ||
-           (approxYellow.x == I.v.x && approxYellow.y == I.v.x))
+        if( isPointEqual(approxPink, I.u) ||
+            isPointEqual(approxYellow, I.v))
             result = false;
         
         matchedMarker[0] = approxYellow;
@@ -580,6 +588,41 @@ bool findTwoMarkers(map<int,Point> &matchedMarker,vector<Mat> lostColorMat,
     }
     
     return result;
+}
+
+bool findRandomMarkers(map<int,Point> &matchedMarker){
+    bool res = true;
+    
+    if(isPointEqual(matchedMarker[YELLOW], Point(0,0))){
+        vector<Point> points = getAllPointInColor(yellowMat);
+        if(points.size() > 0){
+            matchedMarker[YELLOW] = points[0];
+        }
+        else res = false;
+    }
+    if(isPointEqual(matchedMarker[GREEN], Point(0,0))){
+        vector<Point> points = getAllPointInColor(greenMat);
+        if(points.size() > 0){
+            matchedMarker[GREEN] = points[0];
+        }
+        else res = false;
+    }
+    if(isPointEqual(matchedMarker[PINK], Point(0,0))){
+        vector<Point> points = getAllPointInColor(pinkMat);
+        if(points.size() > 0){
+            matchedMarker[PINK] = points[0];
+        }
+        else res = false;
+    }
+    if(isPointEqual(matchedMarker[BLUE], Point(0,0))){
+        vector<Point> points = getAllPointInColor(blueMat);
+        if(points.size() > 0){
+            matchedMarker[BLUE] = points[0];
+        }
+        else res = false;
+    }
+    
+    return res;
 }
 
 vector<Point> findAccurateRectPoint(vector<Point> markerPos, int offset){
@@ -842,10 +885,19 @@ vector<Mat> getUnmatchedColorMat(vector<Point> marker, map<int,Mat> color){
     return output;
 }
 
-vector<int> getMatchedColorCode(vector<Point> marker, map<int,Mat> color){
+vector<int> getMatchedColorCode(vector<Point> marker){
     vector<int> output;
     for(int i = 0; i < marker.size(); i++){
         if(marker[i].x != 0 && marker[i].y != 0)
+            output.push_back(i);
+    }
+    return output;
+}
+
+vector<int> getUnMatchedColorCode(vector<Point> marker){
+    vector<int> output;
+    for(int i = 0; i < marker.size(); i++){
+        if(marker[i].x == 0 && marker[i].y == 0)
             output.push_back(i);
     }
     return output;
@@ -857,11 +909,11 @@ int main(int argc, const char * argv[]) {
     int accuracyLevel = 0;
 
     for(int k = 1; k < 30; k++){
-        
+//        
 //        img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking_day3/" + to_string(k) +".jpg");
-//    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking4/" + to_string(k) +".png");
+    img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking4/" + to_string(k) +".png");
 
-//            img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking4/20.png");
+//            img1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marking4/27.png");
     Mat marker1 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marker/marker1.png");
     Mat marker2 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marker/marker2.png");
     Mat marker3 = imread(DataManager::getInstance().FULL_PATH_PHOTO + "Marker/marker3.png");
@@ -877,19 +929,20 @@ int main(int argc, const char * argv[]) {
     
 //    showTrackbarHSV();
     
-    //using 2 ranges for green marker
+    //using 2 ranges for green, blue marker
     Mat _greenMat;
-    
+    Mat _blueMat;
     inRange(HSVImage, Scalar(46,52,197), Scalar(81,255,255), _greenMat);
     inRange(HSVImage, Scalar(46,131,177), Scalar(81,255,255), greenMat);
     
-    inRange(HSVImage, Scalar(94,127,228), Scalar(116,255,255), blueMat);
-    
-//    inRange(HSVImage, Scalar(59,71,240), Scalar(116,255,255), blueMat);
+    inRange(HSVImage, Scalar(94,127,228), Scalar(116,255,255), _blueMat);
+    inRange(HSVImage, Scalar(59,71,240), Scalar(116,255,255), blueMat);
+        
     inRange(HSVImage, Scalar(114,45,229), Scalar(153,255,255), pinkMat);
     inRange(HSVImage, Scalar(26,34,204), Scalar(40,255,255), yellowMat);
     
     greenMat += _greenMat;
+    blueMat += _blueMat;
     
     medianBlur(greenMat, greenMat, 3);
     medianBlur(blueMat, blueMat, 3);
@@ -949,7 +1002,8 @@ int main(int argc, const char * argv[]) {
         
         
     vector<Mat> missingColorMat = getUnmatchedColorMat(matchedMarker_vect, colorMat_vect);
-    vector<int> matchColorCode = getMatchedColorCode(matchedMarker_vect, colorMat_vect);
+    vector<int> matchColorCode = getMatchedColorCode(matchedMarker_vect);
+    vector<int> unmatchColorCode = getUnMatchedColorCode(matchedMarker_vect);
     map<int, Point> matchedMarker_map = getMatchedMarkerMap(matchedMarker_vect);
     matchedMarker_vect = getMatchedMarker(matchedMarker_vect);
         
@@ -959,46 +1013,34 @@ int main(int argc, const char * argv[]) {
     cvtColor(yellowMat, yellowMat, CV_GRAY2BGR);
     cvtColor(output, output, CV_GRAY2BGR);
         
-    //show matched marker from surf
-    for(size_t i = 0; i < matchedMarker_vect.size(); i++){
-        circle(output, matchedMarker_vect[i], 10, Scalar(0,0,255));
-        circle(img1, matchedMarker_vect[i], 10, Scalar(0,0,255));
-    }
-        
     if(matchedMarker_vect.size() == 3){
         int maximumDistance = 200;
         Point fourthMaker = findFourthMarker(matchedMarker_vect,missingColorMat[0], maximumDistance);
-        matchedMarker_vect.push_back(fourthMaker);
+        matchedMarker_map[unmatchColorCode[0]] = fourthMaker;
         
         //show matched marker from the forth point approximation
         circle(output, fourthMaker, maximumDistance, Scalar(255,255,0));
         circle(output, fourthMaker, 2, Scalar(255,255,0));
-        circle(img1, fourthMaker, maximumDistance, Scalar(255,255,0));
     }
     if(matchedMarker_vect.size() == 2){
-        bool res = findTwoMarkers(matchedMarker_map, missingColorMat, matchColorCode,
+        findTwoMarkers(matchedMarker_map, missingColorMat, matchColorCode,
                                               //proportion between width and height equal 4:1
                                               4.5, output, 200);
-        cout << "Result: " << res << endl;
-//        if(!res){
-//            return EXIT_FAILURE;
-//        }
     }
     if(matchedMarker_vect.size() == 1){
-        if(accuracyLevel == 0){
-            
-        }
-        if(accuracyLevel == 1){
-            cout << "Cannot detect marker" << endl;
-            return EXIT_FAILURE;
+        bool res = findRandomMarkers(matchedMarker_map);
+        if(!res){
+            cout << "Cannot detect markers" << endl;
+            continue;
+//            return EXIT_FAILURE;
         }
     }
     if(matchedMarker_vect.size() == 0){
-        if(accuracyLevel == 0){
-        }
-        if(accuracyLevel == 1){
-            cout << "Cannot detect marker" << endl;
-            return EXIT_FAILURE;
+        bool res = findRandomMarkers(matchedMarker_map);
+        if(!res){
+            cout << "Cannot detect markers" << endl;
+            continue;
+//            return EXIT_FAILURE;
         }
     }
         
@@ -1010,7 +1052,54 @@ int main(int argc, const char * argv[]) {
         
     imshow("res", img1);
     imshow("binary", output);
+        
+    // compute the width of the new image, which will be the
+    // maximum distance between bottom-right and bottom-left
+    // x-coordiates or the top-right and top-left x-coordinates
+    double widthA = sqrt(
+                         pow(matchedMarker_map[PINK].x - matchedMarker_map[YELLOW].x, 2) +
+                         pow(matchedMarker_map[PINK].y - matchedMarker_map[YELLOW].y, 2)
+                         );
+    double widthB = sqrt(
+                         pow(matchedMarker_map[GREEN].x - matchedMarker_map[BLUE].x, 2) +
+                         pow(matchedMarker_map[GREEN].y - matchedMarker_map[BLUE].y, 2)
+                         );
+    double maxWidth = max(int(widthA), int(widthB));
+    
+    // compute the height of the new image, which will be the
+    // maximum distance between the top-right and bottom-right
+    // y-coordinates or the top-left and bottom-left y-coordinates
+    double heightA = sqrt(
+                          pow((matchedMarker_map[GREEN].x - matchedMarker_map[PINK].x),2) +
+                          pow((matchedMarker_map[GREEN].y - matchedMarker_map[PINK].y),2)
+                          );
+    double heightB = sqrt(
+                          pow((matchedMarker_map[BLUE].x - matchedMarker_map[YELLOW].x),2) +
+                          pow((matchedMarker_map[BLUE].y - matchedMarker_map[YELLOW].y),2)
+                          );
+    double maxHeight = max(int(heightA), int(heightB));
+    
+    cv::Point2f source_points[4];
+    cv::Point2f dest_points[4];
+    
+    source_points[0] = matchedMarker_map[YELLOW];
+    source_points[1] = matchedMarker_map[GREEN];
+    source_points[2] = matchedMarker_map[PINK];
+    source_points[3] = matchedMarker_map[BLUE];
+    
+    dest_points[0] = Point(0,0);
+    dest_points[1] = Point(maxWidth - 1,0);
+    dest_points[2] = Point(maxWidth - 1, maxHeight - 1);
+    dest_points[3] = Point(0, maxHeight);
+    
+    Mat m = getPerspectiveTransform(source_points, dest_points);
+    warpPerspective(img1, output, m, Size(maxWidth, maxHeight) );
+    
+//    resize(output, output, Size(1170,325));
+
+    imshow("Cropped", output);
     waitKey(0);
+    
     
     }
     
