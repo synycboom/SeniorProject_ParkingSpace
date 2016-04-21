@@ -54,6 +54,19 @@ bool replace(std::string& str, const std::string& from, const std::string& to) {
     return true;
 }
 
+vector<string> split(const std::string &text, char sep) {
+    vector<string> tokens;
+    size_t start = 0, end = 0;
+    while ((end = text.find(sep, start)) != std::string::npos) {
+        string temp = text.substr(start, end - start);
+        if (temp != "") tokens.push_back(temp);
+        start = end + 1;
+    }
+    string temp = text.substr(start);
+    if (temp != "") tokens.push_back(temp);
+    return tokens;
+}
+
 vector<string> getNextLineAndSplitIntoTokens(istream& str)
 {
     vector<string> result;
@@ -104,13 +117,16 @@ int main(int argc, const char * argv[]) {
     string inputFile = argv[2];
     string outputPath = argv[3];
 
-    std::ifstream file(slotPosCsv);
-    
+//    std::ifstream file(slotPosCsv);
+//    vector<string> line = getNextLineAndSplitIntoTokens(file);
+//    while(line.size() != 0){
+//        csv.push_back(line);
+//        line = getNextLineAndSplitIntoTokens(file);
+//    }
     vector<vector<string>> csv;
-    vector<string> line = getNextLineAndSplitIntoTokens(file);
-    while(line.size() != 0){
-        csv.push_back(line);
-        line = getNextLineAndSplitIntoTokens(file);
+    vector<string> line = split(slotPosCsv, ' ');
+    for(int i = 0; i < line.size(); i++){
+        csv.push_back(split(line[i], ','));
     }
 
     fragmentImage(csv, inputFile, outputPath);
